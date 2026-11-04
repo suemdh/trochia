@@ -176,11 +176,16 @@ def _render_active_billing(user: dict):
         ca, cb, _ = st.columns([1,1,2])
         with ca:
             if st.button("Yes, Cancel", type="primary", key="confirm_cancel_yes"):
-                if billing_stripe.is_stripe_enabled():
-                    billing_stripe.cancel_stripe_subscription(user.get("stripe_subscription_id"))
-                cancel_subscription(user["email"])
+                err = (billing_stripe.cancel_stripe_subscription(user.get("stripe_subscription_id"))
+                       if billing_stripe.is_stripe_enabled() else None)
                 st.session_state.confirm_cancel = False
-                st.success("Subscription cancelled. Access continues until billing period ends.")
+                if err:
+                    # Don't mark it cancelled here if Stripe will keep billing.
+                    st.session_state["_billing_error"] = f"{err} Your plan was not changed -- please contact support."
+                else:
+                    cancel_subscription(user["email"])
+                    # Set before rerun: messages shown directly are wiped by the rerun.
+                    st.session_state["_billing_info"] = "Subscription cancelled. Access continues until the billing period ends."
                 st.rerun()
         with cb:
             if st.button("Keep Plan", key="confirm_cancel_no"):

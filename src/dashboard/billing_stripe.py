@@ -120,29 +120,39 @@ def retrieve_paid_session(session_id: str) -> dict | None:
     if session.payment_status != "paid":
         return None
 
+    # stripe-python v12+ objects are not dicts: obj.get() raises AttributeError.
+    # getattr(obj, field, None) is the safe form for a possibly-missing field.
     card_last4 = None
     sub = session.subscription
-    if sub and sub.get("default_payment_method"):
-        pm = stripe.PaymentMethod.retrieve(sub["default_payment_method"])
-        card_last4 = pm.card.last4 if pm.card else None
+    pm_id = getattr(sub, "default_payment_method", None) if sub else None
+    if pm_id:
+        pm = stripe.PaymentMethod.retrieve(pm_id)
+        card = getattr(pm, "card", None)
+        card_last4 = getattr(card, "last4", None) if card else None
 
     return {
         # Who paid comes from Stripe's own record of the checkout (set by
         # create_checkout_session), never from the browser session -- Stripe's
         # redirect back lands in a fresh, signed-out Streamlit session.
-        "email":               session.metadata.get("email"),
-        "plan":                session.metadata.get("plan"),
+        "email":               getattr(session.metadata, "email", None),
+        "plan":                getattr(session.metadata, "plan", None),
         "stripe_customer_id":  session.customer["id"] if session.customer else None,
         "stripe_subscription_id": sub["id"] if sub else None,
         "card_last4":          card_last4,
     }
 
 
-def cancel_stripe_subscription(subscription_id: str):
-    """Cancels the real subscription on Stripe's side (end of current billing period)."""
+def cancel_stripe_subscription(subscription_id: str) -> str | None:
+    """Cancels the real subscription on Stripe's side (end of current billing
+    period). Returns None on success, else the error to show. This used to
+    swallow every Stripe error, so the site said "cancelled" while Stripe kept
+    billing -- a refused cancel must never look like a successful one."""
     if not subscription_id:
-        return
+        return None
     try:
-        stripe.Subscription.modify(subscription_id, cancel_at_period_end=True)
-    except stripe.error.StripeError:
-        pass
+        sub = stripe.Subscription.modify(subscription_id, cancel_at_period_end=True)
+    except stripe.error.StripeError as e:
+        return f"Stripe refused the cancellation: {getattr(e, 'user_message', None) or e}"
+    if not getattr(sub, "cancel_at_period_end", False):
+        return "Stripe did not confirm the cancellation."
+    return None
