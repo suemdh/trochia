@@ -1,8 +1,15 @@
-"""Trochiá authentication — JSON file-based user store with trial tracking."""
+"""Trochiá authentication — user store with trial tracking.
+
+Accounts live in Postgres (Supabase) when SUPABASE_DB_URL is set -- required on
+the hosted site, whose disk is wiped on every restart -- and in a local JSON
+file otherwise (laptop dev). Same data shape either way: {email: {...fields}}.
+"""
 import hashlib, hmac, json, os
 import streamlit as st
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
+load_dotenv()
 USERS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "users.json")
 TRIAL_DAYS = 14
 PBKDF2_ITERATIONS = 600_000  # OWASP's current recommendation for PBKDF2-SHA256
@@ -25,7 +32,43 @@ def _verify(pw: str, stored: str) -> bool:
     return hmac.compare_digest(hashlib.sha256(pw.encode()).hexdigest(), stored)
 
 
+def _db_url() -> str | None:
+    """.env locally; Streamlit Cloud's Secrets box when deployed."""
+    if os.getenv("SUPABASE_DB_URL"):
+        return os.getenv("SUPABASE_DB_URL")
+    try:
+        return st.secrets.get("SUPABASE_DB_URL")
+    except Exception:
+        return None
+
+
+_schema_ready = False
+
+
+def _db():
+    """New connection per call -- simple, and login/signup only touch the DB
+    a couple of times. Deliberately no fallback to the local file if the DB is
+    configured but unreachable: on the hosted site that file is wiped on every
+    restart, so "falling back" would silently lose new accounts."""
+    global _schema_ready
+    import psycopg
+    conn = psycopg.connect(_db_url(), connect_timeout=10)
+    if not _schema_ready:
+        # Own schema, not "public": Supabase exposes "public" through its REST
+        # API to anyone with the publishable key. RLS with no policies is a
+        # second lock -- only this server's postgres role can read the table.
+        conn.execute("CREATE SCHEMA IF NOT EXISTS app")
+        conn.execute("CREATE TABLE IF NOT EXISTS app.users (email text PRIMARY KEY, data jsonb NOT NULL)")
+        conn.execute("ALTER TABLE app.users ENABLE ROW LEVEL SECURITY")
+        conn.commit()
+        _schema_ready = True
+    return conn
+
+
 def _load_users() -> dict:
+    if _db_url():
+        with _db() as conn:
+            return {email: data for email, data in conn.execute("SELECT email, data FROM app.users")}
     os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
     if not os.path.exists(USERS_FILE):
         return {}
@@ -34,6 +77,17 @@ def _load_users() -> dict:
 
 
 def _save_users(users: dict):
+    if _db_url():
+        from psycopg.types.json import Jsonb
+        # Upsert, never delete: two people signing up at once each save their
+        # own row without wiping the other's.
+        with _db() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO app.users (email, data) VALUES (%s, %s) "
+                    "ON CONFLICT (email) DO UPDATE SET data = EXCLUDED.data",
+                    [(email, Jsonb(data)) for email, data in users.items()])
+        return
     with open(USERS_FILE, "w") as f:
         json.dump(users, f, indent=2)
 
