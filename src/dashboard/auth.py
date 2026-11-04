@@ -213,8 +213,11 @@ def update_plan(email: str, new_plan: str, card_last4: str = None,
     if stripe_subscription_id:
         users[email]["stripe_subscription_id"] = stripe_subscription_id
     _save_users(users)
-    # Refresh session
-    st.session_state.user = _build_session_user(email, users[email])
+    # Refresh the session only if this person is the one signed in. Called from
+    # Stripe's return link too, and that link must never sign anyone in --
+    # anyone holding the URL would become them.
+    if (st.session_state.get("user") or {}).get("email") == email:
+        st.session_state.user = _build_session_user(email, users[email])
 
 
 def cancel_subscription(email: str):

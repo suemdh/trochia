@@ -16,10 +16,13 @@ PLANS = {
 }
 
 
-def _handle_stripe_return(user: dict):
-    """Runs on every page load; only acts when Stripe just redirected back
-    with a Checkout outcome in the URL (added by billing_stripe's
-    success_url/cancel_url)."""
+def _handle_stripe_return(user: dict | None):
+    """Runs on every Billing page load; only acts when Stripe just redirected
+    back with a Checkout outcome in the URL. Works whether or not anyone is
+    signed in: the redirect is a full page load, i.e. a new signed-out
+    Streamlit session, so requiring a session user here meant every real
+    payment went unrecorded. The payer is identified from Stripe's verified
+    session record instead."""
     from auth import update_plan
     params = st.query_params
     checkout = params.get("checkout")
@@ -27,14 +30,17 @@ def _handle_stripe_return(user: dict):
         session_id = params.get("session_id")
         result = billing_stripe.retrieve_paid_session(session_id) if session_id else None
         st.query_params.clear()
-        if result and result.get("plan"):
+        if result and result.get("plan") and result.get("email"):
             update_plan(
-                user["email"], result["plan"],
+                result["email"], result["plan"],
                 card_last4=result.get("card_last4"),
                 stripe_customer_id=result.get("stripe_customer_id"),
                 stripe_subscription_id=result.get("stripe_subscription_id"),
             )
-            st.session_state["_billing_toast"] = f"Subscribed to {result['plan']}! Payment confirmed by Stripe."
+            signed_in_as_payer = bool(user) and user.get("email") == result["email"]
+            st.session_state["_billing_toast"] = (
+                f"Subscribed to {result['plan']}! Payment confirmed by Stripe."
+                + ("" if signed_in_as_payer else f" Sign in as {result['email']} to see your plan."))
         else:
             st.session_state["_billing_error"] = "Could not confirm payment with Stripe. If you were charged, contact support."
         st.rerun()
@@ -49,9 +55,7 @@ def render():
     st.markdown('<div class="sec-header">Billing & Subscription</div>', unsafe_allow_html=True)
 
     user = get_current_user()
-
-    if user:
-        _handle_stripe_return(user)
+    _handle_stripe_return(user)
 
     for key, kind in [("_billing_toast", "success"), ("_billing_error", "error"), ("_billing_info", "info")]:
         msg = st.session_state.pop(key, None)

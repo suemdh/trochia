@@ -127,6 +127,10 @@ def retrieve_paid_session(session_id: str) -> dict | None:
         card_last4 = pm.card.last4 if pm.card else None
 
     return {
+        # Who paid comes from Stripe's own record of the checkout (set by
+        # create_checkout_session), never from the browser session -- Stripe's
+        # redirect back lands in a fresh, signed-out Streamlit session.
+        "email":               session.metadata.get("email"),
         "plan":                session.metadata.get("plan"),
         "stripe_customer_id":  session.customer["id"] if session.customer else None,
         "stripe_subscription_id": sub["id"] if sub else None,
