@@ -41,4 +41,24 @@ if ($LASTEXITCODE -ne 0) { "!!! DATA HEALTH CHECK FAILED -- see validation_repor
 if ($LASTEXITCODE -ne 0) { "!!! TRUST TESTS FAILED -- see log above !!!" | Tee-Object -FilePath $log -Append }
 & .\.venv\Scripts\python.exe scripts\write_backtest_doc.py *>> $log
 
+# 6. Publish: the live site (Streamlit Cloud) redeploys from GitHub, so push
+# the refreshed data -- data files only, never code -- or the public site
+# keeps showing last week's forecasts. Skipped if the trust tests failed, so a
+# broken run never reaches the public site.
+& .\.venv\Scripts\python.exe tests\test_trust.py *> $null
+if ($LASTEXITCODE -eq 0) {
+    git add outputs/forecasts.csv outputs/forecast_history.csv outputs/validation_report.csv `
+            outputs/second_source_report.csv docs/backtest.md data/raw *>> $log
+    git diff --cached --quiet
+    if ($LASTEXITCODE -ne 0) {
+        git commit -q -m "Weekly forecast refresh $(Get-Date -Format yyyy-MM-dd)" *>> $log
+        $env:GIT_TERMINAL_PROMPT = "0"
+        git push -q origin main *>> $log
+        if ($LASTEXITCODE -eq 0) { "Published to GitHub -> live site" | Tee-Object -FilePath $log -Append }
+        else { "!!! PUSH TO GITHUB FAILED -- live site not updated !!!" | Tee-Object -FilePath $log -Append }
+    }
+} else {
+    "!!! NOT PUBLISHED: trust tests failed -- live site keeps last good forecasts !!!" | Tee-Object -FilePath $log -Append
+}
+
 "=== Trochia weekly retrain finished $(Get-Date) ===" | Tee-Object -FilePath $log -Append
