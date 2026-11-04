@@ -1,0 +1,222 @@
+{
+  "Crude Oil (Brent)": {
+    "price": 101.49,
+    "prev_close": 103.52,
+    "unit": "$/barrel",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "BZ=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Crude Oil (WTI)": {
+    "price": 94.1,
+    "prev_close": 95.8,
+    "unit": "$/barrel",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "CL=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Natural Gas": {
+    "price": 2.925,
+    "prev_close": 2.871,
+    "unit": "$/MMBtu",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "NG=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Gasoline (RBOB)": {
+    "price": 2.8325,
+    "prev_close": 2.9369,
+    "unit": "$/gal",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "RB=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Heating Oil": {
+    "price": 4.4579,
+    "prev_close": 4.5306,
+    "unit": "$/gal",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "HO=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Wheat": {
+    "price": 6.015,
+    "prev_close": 5.9325,
+    "unit": "$/bushel",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "ZW=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Corn": {
+    "price": 4.42,
+    "prev_close": 4.3925,
+    "unit": "$/bushel",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "ZC=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Soybeans": {
+    "price": 12.0675,
+    "prev_close": 12.01,
+    "unit": "$/bushel",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "ZS=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Soybean Oil": {
+    "price": 0.6442,
+    "prev_close": 0.6443,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "ZL=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Oats": {
+    "price": 3.405,
+    "prev_close": 3.3775,
+    "unit": "$/bushel",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "ZO=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Rough Rice": {
+    "price": 17.985,
+    "prev_close": 18.055,
+    "unit": "$/cwt",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "ZR=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Coffee (Arabica)": {
+    "price": 2.824,
+    "prev_close": 2.8405,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "KC=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Cocoa": {
+    "price": 5394.0,
+    "prev_close": 5420.0,
+    "unit": "$/metric ton",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "CC=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Sugar (11)": {
+    "price": 0.1843,
+    "prev_close": 0.1835,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "SB=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Cotton": {
+    "price": 0.7863,
+    "prev_close": 0.7729,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "CT=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Orange Juice": {
+    "price": 1.3055,
+    "prev_close": 1.33,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "OJ=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Live Cattle": {
+    "price": 2.1818,
+    "prev_close": 2.1943,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "LE=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Lean Hogs": {
+    "price": 0.5863,
+    "prev_close": 0.5837,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "HE=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Feeder Cattle": {
+    "price": 3.3465,
+    "prev_close": 3.3817,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "GF=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Copper": {
+    "price": 6.417,
+    "prev_close": 6.343,
+    "unit": "$/lb",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "HG=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Gold": {
+    "price": 4048.7,
+    "prev_close": 3966.6001,
+    "unit": "$/troy oz",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "GC=F",
+    "is_live": true,
+    "is_estimated": false
+  },
+  "Silver": {
+    "price": 51.835,
+    "prev_close": 49.955,
+    "unit": "$/troy oz",
+    "source": "yfinance",
+    "as_of": "2026-11-04 13:17 UTC",
+    "ticker": "SI=F",
+    "is_live": true,
+    "is_estimated": false
+  }
+}

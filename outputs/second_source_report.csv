@@ -1,0 +1,9 @@
+commodity,our_price,our_same_date,av_price,av_as_of,diff_pct,status,note
+Crude Oil (WTI),101.17,99.9,103.37,2026-10-27,0.0336,PASS,same benchmark; daily; tolerance 15%
+Crude Oil (Brent),110.67,113.88,123.1,2026-10-27,0.0749,PASS,same benchmark; daily; tolerance 15%
+Natural Gas,2.905,2.697,2.76,2026-10-27,0.0228,PASS,same benchmark; daily; tolerance 15%
+Sugar (11),0.1937,0.1792,0.1794,2026-09-01,0.0011,PASS,same benchmark; monthly; tolerance 15%
+Wheat,6.03,7.1762,6.7182,2026-09-01,0.0682,PASS,different instrument (export/index price incl. basis) -- gross-error check only; monthly; tolerance 50%
+Corn,4.4925,5.2194,6.018,2026-09-01,0.1327,PASS,different instrument (export/index price incl. basis) -- gross-error check only; monthly; tolerance 50%
+Cotton,0.7813,0.8092,0.9584,2026-09-01,0.1557,PASS,different instrument (export/index price incl. basis) -- gross-error check only; monthly; tolerance 50%
+Coffee (Arabica),2.8715,3.0101,3.3012,2026-09-01,0.0882,PASS,different instrument (export/index price incl. basis) -- gross-error check only; monthly; tolerance 50%

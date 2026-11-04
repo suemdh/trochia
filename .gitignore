@@ -1,0 +1,25 @@
+# Secrets -- API keys (FRED, USDA, Alpha Vantage, Stripe, Supabase)
+.env
+.env.*
+
+# User accounts: emails + password hashes
+data/users.json
+
+# Local environment / tooling
+.venv/
+__pycache__/
+*.pyc
+.claude/
+
+# Training-only artifacts -- the website reads outputs/forecasts.csv, not models
+data/models/
+data/processed/
+# Legacy duplicate data folders at repo root; nothing reads these
+/processed/
+/raw/
+
+# Runtime logs (regenerated; may be large)
+outputs/retrain_log_*.txt
+outputs/audit_*.jsonl
+outputs/forecasts_partial.csv
+outputs/*.tmp

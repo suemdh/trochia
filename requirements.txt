@@ -1,0 +1,10 @@
+# What the website (src/dashboard/app.py) needs -- this is the file Streamlit
+# Cloud installs. Training-only packages (torch, statsmodels, sklearn, pmdarima)
+# live in requirements-train.txt; torch alone is ~2 GB and isn't used at display time.
+streamlit==1.62.0
+pandas>=2.0
+numpy>=1.24
+plotly>=5.18
+yfinance>=0.2
+python-dotenv>=1.0
+stripe>=11.0
