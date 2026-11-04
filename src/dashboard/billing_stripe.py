@@ -23,8 +23,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8501")
+
+def _setting(name: str, default: str | None = None) -> str | None:
+    """.env locally; Streamlit Cloud's Secrets box when deployed."""
+    if os.getenv(name):
+        return os.getenv(name)
+    try:
+        import streamlit as st
+        return st.secrets.get(name, default)
+    except Exception:
+        return default
+
+
+STRIPE_SECRET_KEY = _setting("STRIPE_SECRET_KEY")
+BASE_URL = _setting("APP_BASE_URL", "http://localhost:8501")
 
 PRICES_CACHE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "stripe_prices.json")
 
