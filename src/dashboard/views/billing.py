@@ -136,8 +136,7 @@ def _render_trial_upsell(user: dict):
             Free Trial — {days} days remaining
         </div>
         <div style="font-size:0.82rem;color:#8BA0B0;margin-bottom:0.75rem;">
-            Your trial gives you access to all Pro features.
-            Subscribe before it ends to keep uninterrupted access.
+            Your trial gives you full access to every commodity and feature.
         </div>
         <div style="background:#1E3A5F;border-radius:4px;height:8px;width:100%;">
             <div style="background:{bar_color};border-radius:4px;height:8px;width:{pct}%;"></div>
@@ -146,7 +145,7 @@ def _render_trial_upsell(user: dict):
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="sec-header">Choose a Plan to Subscribe</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Plans</div>', unsafe_allow_html=True)
     _payment_form(user)
 
 
@@ -220,13 +219,15 @@ def _render_active_billing(user: dict):
 def _payment_form(user: dict):
     """Real Stripe Checkout -- card entry happens on Stripe's own hosted
     page, never on this one, so no card data ever passes through this app."""
-    if not billing_stripe.is_stripe_enabled():
+    if not billing_stripe.is_live_mode():
+        # Test-mode Stripe can't take real payments, so the public sees this
+        # instead of a checkout. Swapping in a live key opens checkout.
         st.markdown("""
         <div class="sig-card sig-card-yellow" style="padding:1rem;">
-            <div style="font-size:0.88rem;font-weight:600;color:#FFFFFF;">Payments aren't set up yet</div>
+            <div style="font-size:0.88rem;font-weight:600;color:#FFFFFF;">Paid plans are coming soon</div>
             <div style="font-size:0.82rem;color:#8BA0B0;margin-top:0.3rem;">
-                Add a STRIPE_SECRET_KEY to the .env file to enable real subscriptions.
-                No card details are collected here until that's configured.
+                We're putting the finishing touches on paid plans. Your free trial has full access in
+                the meantime, and we'll let you know before anything about your access changes.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -263,16 +264,19 @@ def _payment_form(user: dict):
 def _render_plan_compare(user: dict):
     st.markdown('<div class="sec-header">Plan Comparison</div>', unsafe_allow_html=True)
 
+    # Keep in step with views/pricing.py -- only what exists today is "Yes".
     rows = [
-        ("Commodities tracked",       "5",    f"All {TOTAL_COMMODITIES}", f"All {TOTAL_COMMODITIES}"),
-        ("Signal updates",            "Weekly","Daily",  "Daily"),
-        ("Price history charts",      "Basic", "Full",   "Full"),
-        ("AI Chat assistant",         "-",     "Yes",    "Yes"),
-        ("Scenario Calculator",       "-",     "Yes",    "Yes"),
-        ("Email + SMS alerts",        "Email", "Both",   "Both"),
-        ("API access",                "-",     "-",      "Yes"),
-        ("User seats",                "1",     "1",      "Up to 10"),
-        ("Dedicated support",         "-",     "-",      "Yes"),
+        ("Commodities tracked",       "Up to 5", f"All {TOTAL_COMMODITIES}", f"All {TOTAL_COMMODITIES}"),
+        ("Forecast updates",          "Weekly",  "Weekly",  "Weekly"),
+        ("Live market prices",        "Yes",     "Yes",     "Yes"),
+        ("Price history charts",      "Yes",     "Full",    "Full"),
+        ("Savings calculator",        "Yes",     "Yes",     "Yes"),
+        ("Email alerts",              "Coming soon", "Coming soon", "Coming soon"),
+        ("Text alerts",               "-",       "Coming soon", "Coming soon"),
+        ("AI chat assistant",         "-",       "Coming soon", "Coming soon"),
+        ("API access",                "-",       "-",       "Coming soon"),
+        ("Team seats",                "1",       "1",       "Coming soon (up to 10)"),
+        ("Support",                   "Email",   "Email",   "Priority email"),
     ]
 
     header = "| Feature | Starter $19 | Pro $49 | Business $99 |\n|---|---|---|---|\n"

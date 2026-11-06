@@ -55,6 +55,13 @@ def is_stripe_enabled() -> bool:
     return bool(STRIPE_SECRET_KEY)
 
 
+def is_live_mode() -> bool:
+    """True only with a live Stripe key. While Stripe is in test mode the public
+    Billing page shows "Coming soon" instead of a checkout that can't take real
+    payments -- so launching is just swapping in the live key, nothing else."""
+    return bool(STRIPE_SECRET_KEY) and STRIPE_SECRET_KEY.startswith(("sk_live_", "rk_live_"))
+
+
 def _load_price_cache() -> dict:
     if os.path.exists(PRICES_CACHE):
         with open(PRICES_CACHE) as f:

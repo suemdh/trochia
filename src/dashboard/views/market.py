@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timezone
 from commodity_maps import strip_unit
+from decision.engine import SIGNAL_LABEL
 
 SIG_COLOR = {"RED":"#FF4B4B","YELLOW":"#F0B429","GREEN":"#21C55D"}
 SIG_ORDER  = {"RED":0,"YELLOW":1,"GREEN":2}
@@ -15,18 +16,16 @@ def render(commodities: dict, search_query: str = ""):
     n_live = sum(1 for v in commodities.values() if v.get("is_live"))
     st.markdown(
         f'<p style="color:#8BA0B0;font-size:0.82rem;margin-bottom:1rem;">'
-        f'Price forecasts across all tracked commodities (horizon varies by source -- '
-        f'see each item for its exact forecast window). '
-        f'<span style="color:#21C55D;font-weight:600;">{n_live} live prices</span> '
-        f'(exchange-delayed ~15 min) &nbsp;·&nbsp; refreshed at {now_utc}</p>',
+        f'Where prices are headed for everything we track, and what to do about it. '
+        f'<span style="color:#21C55D;font-weight:600;">{n_live} prices are live</span> '
+        f'(about 15 minutes behind the market) &nbsp;·&nbsp; updated {now_utc}</p>',
         unsafe_allow_html=True,
     )
     st.markdown(
         '<p style="color:#4A6A80;font-size:0.75rem;margin-top:-0.5rem;margin-bottom:1rem;">'
-        'Forecasts are statistical extrapolations of historical price patterns -- they have no '
-        'real-time awareness of breaking news, geopolitical events, or supply shocks, so during '
-        'an active event a forecast can run counter to what current news coverage suggests. Items '
-        'with an unusually large recent move are called out explicitly below.</p>',
+        "Good to know: forecasts are based on past price patterns. They can't see breaking news "
+        "like storms, wars, or supply problems, so when something big is happening, check with "
+        "your supplier too. We flag items whose prices are moving unusually.</p>",
         unsafe_allow_html=True,
     )
 
@@ -36,10 +35,11 @@ def render(commodities: dict, search_query: str = ""):
         q = st.text_input("Filter", value=search_query, placeholder="Search by name...",
                           label_visibility="collapsed")
     with c2:
-        sort_by = st.selectbox("Sort", ["Risk (High → Low)", "Name A–Z", "Change %", "Current Price"],
+        sort_by = st.selectbox("Sort", ["Most urgent first", "Name A–Z", "Biggest price change", "Current Price"],
                                label_visibility="collapsed")
     with c3:
         sig_filter = st.selectbox("Signal", ["All", "RED", "YELLOW", "GREEN"],
+                                  format_func=lambda s: "All items" if s == "All" else SIGNAL_LABEL[s],
                                   label_visibility="collapsed")
 
     # ── Summary counts ─────────────────────────────────────────────────────────
@@ -49,9 +49,9 @@ def render(commodities: dict, search_query: str = ""):
 
     s1, s2, s3 = st.columns(3)
     for col, label, count, color in [
-        (s1,"High Risk",  n_red,    "#FF4B4B"),
-        (s2,"Watch",      n_yellow, "#F0B429"),
-        (s3,"Stable",     n_green,  "#21C55D"),
+        (s1, SIGNAL_LABEL["RED"],    n_red,    "#FF4B4B"),
+        (s2, SIGNAL_LABEL["YELLOW"], n_yellow, "#F0B429"),
+        (s3, SIGNAL_LABEL["GREEN"],  n_green,  "#21C55D"),
     ]:
         with col:
             st.markdown(f"""
@@ -97,11 +97,11 @@ def render(commodities: dict, search_query: str = ""):
             "_contract":          v.get("contract", None),
         })
 
-    if sort_by == "Risk (High → Low)":
+    if sort_by == "Most urgent first":
         rows.sort(key=lambda r: (r["_sig_rank"], -abs(r["Change"])))
     elif sort_by == "Name A–Z":
         rows.sort(key=lambda r: r["Commodity"])
-    elif sort_by == "Change %":
+    elif sort_by == "Biggest price change":
         rows.sort(key=lambda r: -abs(r["Change"]))
     elif sort_by == "Current Price":
         rows.sort(key=lambda r: -r["Price"])
@@ -122,29 +122,28 @@ def render(commodities: dict, search_query: str = ""):
             price_badge = '<span style="background:#21C55D;color:#fff;font-size:0.65rem;font-weight:700;padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">LIVE</span>'
         elif r["_is_estimated"]:
             as_of = r["_price_as_of"]
-            tip   = f"Est. from data as of {as_of}" if as_of else "Lag-compensated estimate"
-            price_badge = f'<span style="background:#4A6A80;color:#fff;font-size:0.65rem;font-weight:700;padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;" title="{tip}">~est.</span>'
+            tip   = (f"Government price data is published with a delay; last data: {as_of}"
+                     if as_of else "Estimated from the latest government data")
+            price_badge = f'<span style="background:#4A6A80;color:#fff;font-size:0.65rem;font-weight:700;padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;" title="{tip}">ESTIMATE</span>'
         else:
             price_badge = ""
 
-        vol_suffix = "  ⚠ Volatile" if r["_volatility_flag"] else ""
-        with st.expander(f"{r['Commodity']}  ·  {pct_str}  ·  {sig}{vol_suffix}"):
+        vol_suffix = "  ·  ⚠ Prices jumping" if r["_volatility_flag"] else ""
+        with st.expander(f"{r['Commodity']}  ·  {pct_str}  ·  {SIGNAL_LABEL[sig]}{vol_suffix}"):
             st.markdown(price_badge, unsafe_allow_html=True)
             if r["_contract"]:
-                ticker_note = f"Source: {r['_contract']} (via {r['_ticker']})"
-            elif r["_ticker"]:
-                ticker_note = f"Source: {r['_ticker']}"
+                ticker_note = f"Price from the {r['_contract']} futures contract"
             else:
-                ticker_note = "Source: FRED/USDA"
+                ticker_note = "Price from U.S. government data (FRED / USDA)"
             st.caption(f"{ticker_note}  ·  as of {r['_price_as_of'] or 'unknown'}")
 
             if r["_price_rejected"]:
                 st.markdown("""
                 <div class="sig-card sig-card-red" style="padding:0.65rem 1rem;margin-bottom:0.75rem;">
-                    <span style="font-size:0.85rem;color:#FFFFFF;font-weight:600;">⚠ Live price unavailable</span><br>
+                    <span style="font-size:0.85rem;color:#FFFFFF;font-weight:600;">⚠ Live price unavailable right now</span><br>
                     <span style="font-size:0.8rem;color:#8BA0B0;">
-                        The live feed returned a price outside this commodity's plausible range, so it
-                        was rejected rather than shown. Displaying the last known-good estimate instead.
+                        The latest price we received didn't look right, so we're showing the last
+                        reliable price instead of a possibly wrong one.
                     </span>
                 </div>
                 """, unsafe_allow_html=True)
@@ -153,19 +152,18 @@ def render(commodities: dict, search_query: str = ""):
                 move = r["_recent_move_pct"]
                 move_str = f"{move*100:+.1f}%" if move is not None else "an unusual amount"
                 if r["_sector_flag"]:
-                    reason = ("The whole energy complex is moving the same direction at once -- "
-                              "individually that's not always extreme for any one of these commodities, "
-                              "but several ordinarily-volatile series leaning the same way together "
-                              "usually means a shared event (e.g. a supply shock), not routine noise.")
+                    reason = (f"Energy prices are all moving the same way right now ({r['Commodity']}: "
+                              f"{move_str} recently). That usually means something big is going on, "
+                              f"like a supply disruption.")
                 else:
-                    reason = ("a statistical outlier vs. its own price history.")
+                    reason = (f"{r['Commodity']} moved {move_str} over the last {r['_horizon']} "
+                              f"{r['_horizon_unit']}, which is more than usual for it.")
                 st.markdown(f"""
                 <div class="sig-card sig-card-yellow" style="padding:0.65rem 1rem;margin-bottom:0.75rem;border-left:4px solid #F0B429;">
-                    <span style="font-size:0.85rem;color:#FFFFFF;font-weight:600;">⚠ Unusual recent price move</span><br>
+                    <span style="font-size:0.85rem;color:#FFFFFF;font-weight:600;">⚠ Prices are jumping around</span><br>
                     <span style="font-size:0.8rem;color:#8BA0B0;">
-                        {r['Commodity']} moved {move_str} over the last {r['_horizon']} {r['_horizon_unit']} --
-                        {reason} The forecast below is a pure extrapolation of historical patterns and has
-                        no real-time awareness of news or events, so treat it with extra caution while this holds.
+                        {reason} Our forecast is based on past patterns and can't see the news,
+                        so double-check with your supplier before acting on it.
                     </span>
                 </div>
                 """, unsafe_allow_html=True)
@@ -178,24 +176,24 @@ def render(commodities: dict, search_query: str = ""):
             unit_label = strip_unit(r["Unit"]) if r["Unit"] else ""
             horizon, horizon_unit = r["_horizon"], r["_horizon_unit"]
             horizon_word = horizon_unit[:-1].capitalize() if horizon == 1 else horizon_unit.capitalize()
-            forecast_label = f"{horizon} {horizon_word} Forecast"
+            forecast_label = f"Expected in {horizon} {horizon_word.lower()}"
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric(f"Current Price ({unit_label})" if unit_label else "Current Price",
+            m1.metric(f"Price today ({unit_label})" if unit_label else "Price today",
                       _fmt(r['Price']))
             m2.metric(f"{forecast_label} ({unit_label})" if unit_label else forecast_label,
                       _fmt(r['Forecast']))
-            m3.metric("Change",         pct_str)
+            m3.metric("Expected change", pct_str)
             # Backtest-backed reliability instead of the old "Confidence 90%",
             # which was a cosmetic transform of error (0.95 - error/2), not a
             # probability -- and read 80-92% even for models that couldn't
             # beat a simple "no change" forecast.
             err = r["_rmse_pct"]
-            m4.metric("Typical error", f"±{err*100:.0f}%" if err is not None else "n/a",
-                      help="Average size of this model's miss in backtesting, as % of price.")
+            m4.metric("Margin of error", f"±{err*100:.0f}%" if err is not None else "n/a",
+                      help="On average, past forecasts for this item were off by about this much.")
 
-            skill = ("Beats a no-change forecast in backtesting" if r["_beats_naive"]
-                     else "Has not beaten a no-change forecast in backtesting -- treat as a watch signal only")
-            rng = (f"Likely range: {_fmt(r['_lo'])} – {_fmt(r['_hi'])}  ·  "
+            skill = ("Track record: more accurate than assuming prices stay flat." if r["_beats_naive"]
+                     else "No proven track record yet -- treat this as a heads-up, not a reason to buy.")
+            rng = (f"Likely price in {horizon} {horizon_word.lower()}: {_fmt(r['_lo'])} – {_fmt(r['_hi'])}  ·  "
                    if r["_lo"] is not None and r["_hi"] is not None else "")
             st.caption(f"{rng}{skill}")
 
@@ -205,7 +203,7 @@ def render(commodities: dict, search_query: str = ""):
             </div>
             """, unsafe_allow_html=True)
 
-            if st.button(f"View chart", key=f"chart_{r['Commodity']}", type="primary"):
+            if st.button("See chart & savings calculator", key=f"chart_{r['Commodity']}", type="primary"):
                 st.session_state.page = "Commodities"
                 st.session_state.selected_commodity = r["Commodity"]
                 st.rerun()

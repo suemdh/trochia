@@ -229,6 +229,28 @@ def test_subscriber_gets_portal_not_a_second_checkout():
     assert not any("Checkout" in l for l in labels), "subscriber offered a second checkout (double billing)"
 
 
+def _trial_billing_page(key):
+    billing_stripe.STRIPE_SECRET_KEY = key
+    try:
+        _reset()
+        at = AppTest.from_file(APP, default_timeout=120)
+        at.session_state["page"] = "Billing"
+        at.session_state["user"] = auth._build_session_user("payer@test.com", _users()["payer@test.com"])
+        at.run()
+        assert not at.exception, at.exception
+        return [b.label for b in at.button], " ".join(m.value for m in at.markdown)
+    finally:
+        billing_stripe.STRIPE_SECRET_KEY = "rk_test_fake"
+
+
+def test_test_mode_shows_coming_soon_live_mode_shows_checkout():
+    labels, text = _trial_billing_page("rk_test_fake")
+    assert "Paid plans are coming soon" in text
+    assert not any("Checkout" in l for l in labels), "test-mode checkout shown to the public"
+    labels, text = _trial_billing_page("rk_live_fake")
+    assert any("Checkout" in l for l in labels), "live key didn't open checkout"
+
+
 def test_cancelling_subscriber_has_no_cancel_button():
     labels = _billing_buttons(plan="Pro", billing_status="cancelling", stripe_customer_id="cus_1")
     assert "Cancel Subscription" not in labels and "Manage subscription" in labels

@@ -11,8 +11,9 @@ sys.path.insert(0, _ROOT)
 sys.path.insert(0, os.path.join(_ROOT, "src"))
 
 from commodity_maps import (
-    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP, yfinance_safe_name,
+    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP, yfinance_safe_name, strip_unit,
 )
+from decision.engine import SIGNAL_LABEL
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "raw")
 
@@ -62,33 +63,29 @@ def render(commodities: dict):
     unit = v.get("unit", "")
     horizon      = v.get("horizon", 8)
     horizon_unit = v.get("horizon_unit", "weeks")
-    horizon_label = f"{horizon}-{horizon_unit[:-1].capitalize()} Forecast" if horizon == 1 \
-        else f"{horizon} {horizon_unit.capitalize()} Forecast"
+    span = f"{horizon} {horizon_unit[:-1] if horizon == 1 else horizon_unit}"
 
     # ── Metrics row ────────────────────────────────────────────────────────────
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Current Price",  f"${v['current']:.3g}", help=unit)
-    m2.metric(horizon_label,    f"${v['forecast']:.3g}")
-    m3.metric("Change",         f"{'+' if pct>=0 else ''}{pct:.1f}%")
+    m1.metric("Price today",  f"${v['current']:.3g}", help=unit)
+    m2.metric(f"Expected in {span}", f"${v['forecast']:.3g}")
+    m3.metric("Expected change", f"{'+' if pct>=0 else ''}{pct:.1f}%")
     err = v.get("rmse_pct")
-    m4.metric("Typical error", f"±{err*100:.0f}%" if err is not None else "n/a",
-              help="Average size of this model's miss in backtesting, as % of price.")
+    m4.metric("Margin of error", f"±{err*100:.0f}%" if err is not None else "n/a",
+              help="On average, past forecasts for this item were off by about this much.")
     with m5:
-        color = {"RED":"#FF4B4B","YELLOW":"#F0B429","GREEN":"#21C55D"}[sig]
         st.markdown(f'<div style="padding:1.4rem 0;">'
-                    f'<span class="badge-{sig.lower()}">{sig}</span></div>',
+                    f'<span class="badge-{sig.lower()}">{SIGNAL_LABEL[sig]}</span></div>',
                     unsafe_allow_html=True)
 
-    skill = ("This model beat a simple no-change forecast in backtesting."
+    skill = ("Track record: in testing, this forecast was more accurate than assuming prices stay flat."
              if str(v.get("beat_naive")) == "True" else
-             "This model has NOT beaten a simple no-change forecast in backtesting -- treat its "
-             "direction as a watch signal, not a buy signal.")
+             "No proven track record yet: in testing, this forecast wasn't more accurate than assuming "
+             "prices stay flat -- treat it as a heads-up, not a reason to buy.")
     st.caption(
-        f"{skill} This forecast extrapolates historical price patterns and has no real-time "
-        "awareness of breaking news or geopolitical events -- during an active event, it can "
-        "point the opposite direction from current news coverage. Informational only, not "
-        "financial advice. Futures and national-average retail prices are not the price your "
-        "supplier will charge you; your delivered cost includes local basis, freight, and markup."
+        f"{skill} Forecasts are based on past price patterns and can't see breaking news. "
+        "Prices shown are market or national-average prices; your supplier's price will include "
+        "their own costs like delivery and markup. For information only -- not financial advice."
     )
 
     # Recommendation
@@ -101,20 +98,16 @@ def render(commodities: dict):
         move = v.get("recent_move_pct")
         move_str = f"{move*100:+.1f}%" if move is not None else "an unusual amount"
         if v.get("sector_flag"):
-            reason = ("the whole energy complex is moving the same direction at once -- "
-                      "individually that's not always extreme for any one of these commodities, "
-                      "but several ordinarily-volatile series leaning the same way together "
-                      "usually means a shared event (e.g. a supply shock), not routine noise")
+            reason = (f"Energy prices are all moving the same way right now ({selected}: {move_str} "
+                      f"recently). That usually means something big is going on, like a supply disruption.")
         else:
-            reason = "a statistical outlier vs. its own price history (e.g. an active supply shock or breaking event)"
+            reason = f"{selected} moved {move_str} over the last {span}, which is more than usual for it."
         st.markdown(f"""
         <div class="sig-card sig-card-yellow" style="margin:0.75rem 0;border-left:4px solid #F0B429;">
-            <span style="font-size:0.88rem;font-weight:600;">⚠ Unusual recent price move</span><br>
+            <span style="font-size:0.88rem;font-weight:600;">⚠ Prices are jumping around</span><br>
             <span style="font-size:0.82rem;color:#8BA0B0;">
-                {selected} moved {move_str} over the last {horizon} {horizon_unit} --
-                {reason}. This forecast is a pure extrapolation of
-                historical patterns with no real-time news awareness, so treat it with
-                extra caution while this holds.
+                {reason} Our forecast is based on past patterns and can't see the news, so
+                double-check with your supplier before acting on it.
             </span>
         </div>
         """, unsafe_allow_html=True)
@@ -129,10 +122,11 @@ def render(commodities: dict):
         hx = hist_df["date"].dt.strftime("%Y-%m-%d").tolist()
         hy = hist_df.iloc[:, 1].tolist()
     else:
-        rng = np.random.default_rng(abs(hash(selected)) % 2**32)
-        hy  = list(v["current"] * (1 + rng.normal(0, 0.015, 52).cumsum() * 0.08))
-        today = datetime.today()
-        hx = [(today - timedelta(weeks=52-i)).strftime("%Y-%m-%d") for i in range(52)]
+        # This used to draw a made-up random-walk "history" here. Say so instead.
+        hx = [datetime.today().strftime("%Y-%m-%d")]
+        hy = [v["current"]]
+        st.info("Price history for this item isn't available right now -- the chart shows "
+                "today's price and the forecast only.")
 
     horizon   = v.get("horizon", 8)
     step_days = int(v.get("step_days", 7))   # a step is a month for FRED, a week for yfinance
@@ -152,14 +146,14 @@ def render(commodities: dict):
         hi_band = [p + band for p in fy]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=hx, y=hy, name="History",
+    fig.add_trace(go.Scatter(x=hx, y=hy, name="Past prices",
                              line=dict(color="#007A8E", width=2)))
     fig.add_trace(go.Scatter(x=fx, y=fy, name="Forecast",
                              line=dict(color=SIG_COLOR[sig], width=2, dash="dash")))
     fig.add_trace(go.Scatter(
         x=fx+fx[::-1], y=hi_band+lo_band[::-1],
         fill="toself", fillcolor=SIG_BAND[sig],
-        line=dict(color="rgba(0,0,0,0)"), name="Likely range (from backtest error)",
+        line=dict(color="rgba(0,0,0,0)"), name="Likely range",
     ))
     fig.update_layout(
         paper_bgcolor="#0B1929", plot_bgcolor="#112233",
@@ -174,31 +168,32 @@ def render(commodities: dict):
 
     # ── Scenario calculator ────────────────────────────────────────────────────
     st.markdown('<div class="sec-header">Scenario Calculator</div>', unsafe_allow_html=True)
-    st.markdown(f'<p style="color:#8BA0B0;font-size:0.85rem;">Estimate savings from pre-buying now vs. paying the '
-                f'{horizon} {horizon_unit}-out forecast price of ${v["forecast"]:.3g}. The forecast price does not '
-                f'change with the weeks selected below -- it is fixed to the {horizon}-{horizon_unit[:-1]} horizon shown above.</p>',
+    st.markdown(f'<p style="color:#8BA0B0;font-size:0.85rem;">How much could you save by buying ahead? '
+                f'Enter how much you use and how many weeks of stock you\'d buy now. We compare today\'s '
+                f'price with the forecast price in {span} (${v["forecast"]:.3g}).</p>',
                 unsafe_allow_html=True)
 
+    unit_word = strip_unit(unit)
     ca, cb = st.columns(2)
     with ca:
-        usage = st.number_input(f"Weekly usage ({unit})", min_value=1, value=100, step=10)
+        usage = st.number_input(f"How much you use per week ({unit_word})", min_value=1, value=100, step=10)
     with cb:
-        weeks = st.number_input("Pre-buy weeks ahead", min_value=1, max_value=26, value=4)
+        weeks = st.number_input("Weeks of stock to buy now", min_value=1, max_value=26, value=4)
 
     now_cost   = v["current"]  * usage * weeks
     later_cost = v["forecast"] * usage * weeks
     savings    = max(0, later_cost - now_cost)
 
     r1, r2, r3 = st.columns(3)
-    r1.metric("Buy now total",    f"${now_cost:,.0f}")
-    r2.metric("Projected later",  f"${later_cost:,.0f}")
-    r3.metric("Potential savings",f"${savings:,.0f}")
+    r1.metric("Cost if you buy now",       f"${now_cost:,.0f}")
+    r2.metric("Cost if you wait",          f"${later_cost:,.0f}")
+    r3.metric("You could save",            f"${savings:,.0f}")
 
     if savings > 0 and sig in ("RED","YELLOW"):
         st.markdown(f"""
         <div class="sig-card sig-card-green" style="font-size:0.86rem;margin-top:0.5rem;">
-            Buying {weeks} weeks of {selected} now could save
+            Buying {weeks} weeks of {selected} now could save you
             <strong style="color:#21C55D;">${savings:,.0f}</strong>
-            before the forecast price increase takes effect.
+            -- if prices rise as forecast.
         </div>
         """, unsafe_allow_html=True)

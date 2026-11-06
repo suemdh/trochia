@@ -16,13 +16,16 @@ SYSTEM_PROMPT = f"""You are the Trochiá assistant — a helpful, concise expert
 
 Trochiá is a commodity intelligence platform that tracks {TOTAL_COMMODITIES} commodities -- retail
 grocery items (via FRED/BLS and USDA) and exchange-traded futures (via Yahoo Finance) -- using
-machine learning forecasts (SARIMA + LSTM hybrid models). It gives GREEN/YELLOW/RED risk signals
+machine learning forecasts (SARIMA + LSTM hybrid models). It gives "Buy ahead" / "Watch" / "No action needed" signals
 to help restaurants and small food businesses decide when to buy in bulk. Each commodity has its
 own forecast horizon: weeks for exchange-traded futures, months for grocery items sourced from
 government data (since that data itself is only published monthly).
 
 Answer questions about:
-- How to read the signals (GREEN = stable, YELLOW = moderate risk, RED = buy now)
+- How to read the signals (No action needed = steady or falling, Watch = may rise, Buy ahead = likely to rise)
+- Paid plans are coming soon; email alerts, team seats and API access are planned, not available yet
+
+Speak in plain English for busy small-business owners -- no statistics jargon.
 - What each commodity means for a food business
 - How the forecasting models work
 - How to use the platform features (Market tab, Commodities detail, Scenario Calculator)
@@ -33,7 +36,7 @@ Keep answers concise — 2-4 sentences unless more detail is needed. Be helpful 
 FAQ = [
     {
         "keywords": ["signal", "color", "red", "green", "yellow", "mean"],
-        "answer": "Signals show forecast risk over each commodity's own horizon -- weeks for exchange-traded futures, months for grocery items. GREEN means prices are stable — no action needed. YELLOW means a moderate increase is expected — consider buying slightly ahead. RED means a significant price spike is forecast — buy now or lock in contracts."
+        "answer": "Every item gets one of three signals. Buy ahead (red): prices are likely to rise 10% or more, and the forecast has a good track record -- consider buying extra now or locking in a price. Watch (yellow): prices may rise, but we're less sure -- keep an eye on it and get a quote. No action needed (green): prices look steady or are falling -- buy as usual."
     },
     {
         "keywords": ["commodity", "track", "what", "include", "list"],
@@ -41,7 +44,7 @@ FAQ = [
     },
     {
         "keywords": ["forecast", "model", "predict", "accurate", "how"],
-        "answer": "Forecasts use a hybrid of three models: SARIMA (statistical time-series), LSTM (deep learning neural network), and a baseline linear model. Their outputs are combined using RMSE-weighted averaging — models that performed better historically get more weight."
+        "answer": "Forecasts are built from years of each item's price history, using a blend of three methods that each get more say the better they've predicted that item in the past. Every card shows the forecast's usual margin of error, and tells you when an item's forecast doesn't have a proven track record yet. Forecasts can't see breaking news, so check with your supplier when something big is happening."
     },
     {
         "keywords": ["data", "source", "where", "come from", "fred", "usda"],
@@ -57,11 +60,11 @@ FAQ = [
     },
     {
         "keywords": ["plan", "price", "subscription", "cost", "starter", "pro", "business"],
-        "answer": f"Trochiá offers three plans: Starter ($19/mo) for 5 commodities and weekly alerts, Pro ($49/mo) for all {TOTAL_COMMODITIES} commodities, daily updates, and AI Chat, and Business ($99/mo) for up to 10 user seats, API access, and dedicated support."
+        "answer": f"Paid plans are coming soon: Starter ($19/mo, up to 5 commodities), Pro ($49/mo, all {TOTAL_COMMODITIES} commodities), and Business ($99/mo, everything in Pro plus priority support). Email alerts, team seats and API access are planned. For now, every account starts with a free 14-day trial."
     },
     {
         "keywords": ["sign in", "account", "login", "register", "sign up"],
-        "answer": "Click 'Sign In' in the top navigation bar. You can create a free account and choose a subscription plan. Your account tracks your usage, alert preferences, and subscription tier."
+        "answer": "Go to Profile in the sidebar to sign in or create a free account. If you forgot your password, use 'Forgot your password?' under the sign-in form."
     },
     {
         "keywords": ["help", "tour", "guide", "tutorial", "start", "begin"],

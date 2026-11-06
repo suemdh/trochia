@@ -1,6 +1,7 @@
 """Trochiá — Home page."""
 import os
 import streamlit as st
+from decision.engine import SIGNAL_LABEL
 
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets")
 
@@ -15,8 +16,8 @@ def render(commodities: dict):
          border-radius:12px;padding:3rem 2.5rem 2.5rem;margin-bottom:2rem;">
         <h1 style="font-size:2.4rem;margin:0 0 0.4rem;letter-spacing:0.08em;color:#FFFFFF;">TROCHIÁ</h1>
         <p style="font-size:1.05rem;color:#A8DBB9;margin:0 0 1.5rem;max-width:520px;">
-            Commodity intelligence for small businesses. Know when prices are about to rise —
-            before they do.
+            Price forecasts for the ingredients and supplies your business buys -- so you get a
+            heads-up before prices rise, and know when it's fine to wait.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -49,7 +50,7 @@ def render(commodities: dict):
                 <div style="font-size:1.7rem;font-weight:700;color:#FFFFFF;">${v['current']:.3g}</div>
                 <div style="font-size:0.75rem;color:#8BA0B0;margin:0.1rem 0;">{v.get('unit','')}</div>
                 <div style="margin-top:0.5rem;">
-                    <span class="badge-{sig.lower()}">{sig}</span>
+                    <span class="badge-{sig.lower()}">{SIGNAL_LABEL[sig]}</span>
                     <span style="margin-left:0.5rem;font-size:0.8rem;color:{color};">
                         {arrow}{pct:.1f}%
                     </span>
@@ -69,14 +70,16 @@ def render(commodities: dict):
 
     f1, f2, f3 = st.columns(3)
     for col, title, desc, border in [
-        (f1, "Market Signals",
-         f"RED, YELLOW, and GREEN signals on {len(commodities)} commodities tell you at a glance whether to act now, watch closely, or hold.",
+        (f1, "Clear signals",
+         f"Each of {len(commodities)} items gets one simple call: Buy ahead, Watch, or No action "
+         f"needed -- so you know at a glance what to do.",
          "#FF4B4B"),
-        (f2, "AI Price Forecasts",
-         "Hybrid ML models (SARIMA + LSTM) generate price forecasts over each commodity's own horizon -- weeks for exchange-traded futures, months for grocery items -- updated whenever new data arrives.",
+        (f2, "Price forecasts",
+         "Forecasts built from years of price history and updated every week, with an honest margin "
+         "of error and a note when an item's forecast isn't proven yet.",
          "#007A8E"),
-        (f3, "Cost Planning",
-         "The Scenario Calculator shows exactly how much you save by pre-buying before a forecasted price spike.",
+        (f3, "Savings calculator",
+         "Enter how much you use and see what buying ahead could save you if prices rise as forecast.",
          "#21C55D"),
     ]:
         with col:

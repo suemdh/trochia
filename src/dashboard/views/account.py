@@ -9,11 +9,12 @@ from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMM
 import mailer
 
 PLAN_COLOR = {"Starter":"#007A8E","Pro":"#21C55D","Business":"#F0B429","Trial":"#A8DBB9"}
+# Only what exists today -- keep in step with views/pricing.py.
 PLAN_FEATURES = {
-    "Trial":    ["All commodities (trial)", "Daily updates", "AI Chat", "Full charts", "Scenario Calculator"],
-    "Starter":  ["5 commodities", "Weekly signals", "Email alerts", "Basic charts"],
-    "Pro":      ["All commodities", "Daily updates", "AI Chat", "Full charts", "Scenario Calculator"],
-    "Business": ["Everything in Pro", "API access", "10 user seats", "Dedicated support"],
+    "Trial":    ["All commodities", "Weekly forecasts with live prices", "Full charts", "Savings calculator"],
+    "Starter":  ["Up to 5 commodities", "Weekly forecasts with live prices", "Price charts", "Savings calculator"],
+    "Pro":      ["All commodities", "Weekly forecasts with live prices", "Full charts", "Savings calculator"],
+    "Business": ["Everything in Pro", "Priority email support"],
 }
 
 # The commodities actually forecast -- this used to be a hand-typed copy that
@@ -43,7 +44,7 @@ def _render_dashboard(user: dict):
                 Free Trial - {days} day{"s" if days != 1 else ""} remaining
             </div>
             <div style="font-size:0.8rem;color:#8BA0B0;margin-top:0.25rem;">
-                After your trial ends, access is paused until you subscribe. Go to Billing to choose a plan.
+                Paid plans are coming soon -- we'll let you know before anything about your access changes.
             </div>
         </div>
         """, unsafe_allow_html=True)

@@ -50,6 +50,16 @@ RED_RMSE_MULTIPLIER = 1.5     # a move must also clear this many multiples of th
                                # move means nothing if this model is typically off by 15%
 
 
+# Plain-English names for the signals, shown everywhere instead of the raw
+# colour codes -- one place, so every page tells a business owner the same thing.
+SIGNAL_LABEL = {"RED": "Buy ahead", "YELLOW": "Watch", "GREEN": "No action needed"}
+SIGNAL_MEANING = {
+    "RED":    "Prices are likely to rise -- consider buying ahead",
+    "YELLOW": "Prices may rise -- keep an eye on it",
+    "GREEN":  "Prices look steady or are falling -- buy as usual",
+}
+
+
 def classify_signal(pct_change: float, confidence: float, rmse_pct: float = 0.0,
                     beats_naive: bool = True) -> str:
     direction_up = pct_change > 0
@@ -93,34 +103,37 @@ def build_message(forecast: ForecastInput, signal: str, pct_change: float, dolla
     the Scenario Calculator on the Commodity Detail page, which asks the
     business for their own usage instead of guessing one.
     """
-    pct_str   = f"{pct_change * 100:+.1f}%"
-    direction = "up" if pct_change > 0 else "down"
-    span      = f"{forecast.horizon_weeks} {forecast.horizon_unit}"
-    unit      = strip_unit(forecast.unit_label)
-    delta     = forecast.forecast_price - forecast.current_price
-    delta_str = f"${abs(delta):.2f}/{unit} {'more' if delta > 0 else 'less'}"
+    # Written for a busy business owner, not an analyst: what's happening, what
+    # it means in dollars per unit, and what to do -- no model jargon.
+    pct_str  = f"{pct_change * 100:+.1f}%"
+    span     = f"the next {forecast.horizon_weeks} {forecast.horizon_unit}"
+    unit     = strip_unit(forecast.unit_label)
+    per_unit = f"${abs(forecast.forecast_price - forecast.current_price):.2f} per {unit}"
+    calc     = "The Scenario Calculator on this item's page shows what it means for your own order sizes."
 
     if signal == "GREEN":
-        return (
-            f"{forecast.commodity}: prices stable or favorable ({pct_str} over {span}). "
-            f"No action needed."
-        )
-    elif signal == "YELLOW":
-        caveat = ("" if forecast.beats_naive else
-                  " This model hasn't beaten a simple \"price stays the same\" forecast in "
-                  "backtesting, so treat this as a watch item, not a buy signal.")
-        return (
-            f"{forecast.commodity}: moderate risk detected, {direction} {pct_str} over "
-            f"{span} ({delta_str} than today). Monitor closely, and use the Scenario "
-            f"Calculator below to estimate the impact on your own usage.{caveat}"
-        )
-    else:  # RED
-        return (
-            f"{forecast.commodity}: forecast move ({pct_str} over {span}, {delta_str} "
-            f"than today) is large enough, relative to this model's own track record, to "
-            f"call it a likely price spike. Consider locking in current pricing -- use the "
-            f"Scenario Calculator below for savings based on your own usage."
-        )
+        if pct_change <= -YELLOW_THRESHOLD_PCT:
+            return (f"{forecast.commodity}: no need to stock up. Prices are expected to drop "
+                    f"({pct_str} over {span}, about {per_unit} less), so buying only what you "
+                    f"need for now could save you money.")
+        return (f"{forecast.commodity}: no action needed. Prices look steady ({pct_str} over "
+                f"{span}). Keep buying as usual.")
+    if signal == "YELLOW":
+        msg = (f"{forecast.commodity}: keep an eye on this. Prices may go up ({pct_str} over "
+               f"{span}, about {per_unit} more). It's a good time to ask your supplier for a "
+               f"quote. {calc}")
+        if not forecast.beats_naive:
+            msg += (" Treat this as a heads-up, not a reason to buy: in testing, this forecast "
+                    "hasn't yet been more accurate than simply assuming prices stay the same.")
+        elif abs(pct_change) >= RED_THRESHOLD_PCT:
+            # Big move, proven model -- held at Watch only by its wide margin of error.
+            msg += (" This item's prices are hard to predict (the forecast's margin of error is "
+                    "wide), so treat this as a heads-up rather than a firm call.")
+        return msg
+    return (f"{forecast.commodity}: prices are likely to go up ({pct_str} over {span}, about "
+            f"{per_unit} more). This forecast has a good track record, and the expected rise is "
+            f"bigger than its usual margin of error. Consider buying ahead or locking in a price "
+            f"with your supplier. {calc}")
 
 
 def evaluate(forecast: ForecastInput) -> Recommendation:
@@ -172,6 +185,6 @@ if __name__ == "__main__":
     # A model that can't beat "no change" must never fire a RED buy alert.
     no_skill = evaluate(ForecastInput(**{**example.__dict__, "beats_naive": False}))
     assert no_skill.signal == "YELLOW", "no-skill model fired a high-confidence alert"
-    assert "watch item" in no_skill.message
+    assert "heads-up" in no_skill.message
 
     print("All self-checks passed.")

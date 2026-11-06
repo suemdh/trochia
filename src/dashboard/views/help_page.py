@@ -69,10 +69,10 @@ def render():
         <div class="sig-card sig-card-blue" style="margin-bottom:1rem;">
             <div style="font-size:1rem;font-weight:700;color:#FFFFFF;margin-bottom:0.5rem;">What the signals mean</div>
             <div style="font-size:0.88rem;color:#8BA0B0;line-height:1.7;">
-                Every commodity gets a RED, YELLOW, or GREEN signal based on its price
-                forecast from our ML models, over that commodity's own forecast horizon
-                (weeks for exchange-traded futures, months for grocery items sourced from
-                government data). Signals update whenever new data arrives.
+                Every item gets one of three signals, based on where we expect its price to
+                go next -- over the next 8 weeks for most market-traded items, or the next
+                8 months for grocery prices from government data. Signals are refreshed
+                every week.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -81,36 +81,37 @@ def render():
         with c1:
             st.markdown("""
             <div class="sig-card sig-card-red">
-                <div style="font-size:0.92rem;font-weight:700;color:#FF4B4B;margin-bottom:0.4rem;">RED - Buy Now</div>
+                <div style="font-size:0.92rem;font-weight:700;color:#FF4B4B;margin-bottom:0.4rem;">Buy ahead</div>
                 <div style="font-size:0.8rem;color:#8BA0B0;line-height:1.6;">
-                    Forecast increase of 10%+ that is also larger than 1.5x this model's own
-                    typical backtest error, from a model that has beaten a "no change"
-                    forecast in backtesting.<br><br>
-                    <strong style="color:#FFFFFF;">Do:</strong> Pre-purchase inventory, lock in
-                    supplier contracts, or hedge cost exposure before the spike arrives.
+                    Prices are likely to rise 10% or more. We only say this when the forecast
+                    has a good track record for that item and the rise is bigger than its
+                    usual margin of error.<br><br>
+                    <strong style="color:#FFFFFF;">What to do:</strong> Consider buying extra
+                    now or locking in today's price with your supplier.
                 </div>
             </div>
             """, unsafe_allow_html=True)
         with c2:
             st.markdown("""
             <div class="sig-card sig-card-yellow">
-                <div style="font-size:0.92rem;font-weight:700;color:#F0B429;margin-bottom:0.4rem;">YELLOW - Watch</div>
+                <div style="font-size:0.92rem;font-weight:700;color:#F0B429;margin-bottom:0.4rem;">Watch</div>
                 <div style="font-size:0.8rem;color:#8BA0B0;line-height:1.6;">
-                    Forecast increase of 5%+ that doesn't meet the RED bar -- including any
-                    increase from a model that hasn't beaten a "no change" forecast.<br><br>
-                    <strong style="color:#FFFFFF;">Do:</strong> Monitor daily. Consider partial
-                    pre-purchasing to reduce risk without overcommitting.
+                    Prices may rise 5% or more, but we're less sure -- for example, the
+                    forecast for that item doesn't have a proven track record yet.<br><br>
+                    <strong style="color:#FFFFFF;">What to do:</strong> Keep an eye on it and
+                    get a quote from your supplier. No need to rush.
                 </div>
             </div>
             """, unsafe_allow_html=True)
         with c3:
             st.markdown("""
             <div class="sig-card sig-card-green">
-                <div style="font-size:0.92rem;font-weight:700;color:#21C55D;margin-bottom:0.4rem;">GREEN - Stable</div>
+                <div style="font-size:0.92rem;font-weight:700;color:#21C55D;margin-bottom:0.4rem;">No action needed</div>
                 <div style="font-size:0.8rem;color:#8BA0B0;line-height:1.6;">
-                    Forecast increase under 5%, or a forecast that prices will fall.<br><br>
-                    <strong style="color:#FFFFFF;">Do:</strong> No urgent action needed.
-                    Buy at your normal pace and revisit next week.
+                    Prices look steady (less than a 5% rise expected) or are expected
+                    to fall.<br><br>
+                    <strong style="color:#FFFFFF;">What to do:</strong> Buy as usual. If prices
+                    are falling, buying only what you need now may save you money.
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -271,36 +272,38 @@ def render():
         <div class="sig-card sig-card-blue" style="margin-bottom:1rem;">
             <div style="font-size:1rem;font-weight:700;color:#FFFFFF;margin-bottom:0.5rem;">Free Trial & Billing</div>
             <div style="font-size:0.88rem;color:#8BA0B0;line-height:1.7;">
-                Every Trochiá account starts with a 14-day free trial with full Pro features.
-                No credit card required to start.
+                Every Trochiá account starts with a 14-day free trial with full access.
+                No credit card required. Paid plans are coming soon.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown(f"""
         #### Your 14-day free trial
-        - Starts the moment you create your account - no credit card needed
-        - Full access to all {TOTAL_COMMODITIES} commodities, daily updates, AI Chat, charts, and the Scenario Calculator
-        - At day 14, access pauses until you pick a plan - your account and history are saved
+        - Starts the moment you create your account -- no credit card needed
+        - Full access to all {TOTAL_COMMODITIES} commodities, weekly forecasts with live prices,
+          charts, and the savings calculator
+        - Paid plans are coming soon -- we'll let you know before anything about your access changes
 
-        #### Choosing a plan
+        #### Plans (coming soon)
 
         | Plan | Price | Best for |
         |---|---|---|
-        | **Starter** | $19/mo | Individual buyers, 5 commodities, weekly updates |
-        | **Pro** | $49/mo | All {TOTAL_COMMODITIES} commodities, daily updates, AI Chat, charts |
-        | **Business** | $99/mo | Teams, API access, up to 10 seats, dedicated support |
+        | **Starter** | $19/mo | Individual buyers tracking up to 5 commodities |
+        | **Pro** | $49/mo | Businesses tracking all {TOTAL_COMMODITIES} commodities |
+        | **Business** | $99/mo | Everything in Pro plus priority support; team seats and API access coming soon |
 
         #### Subscribing
-        Go to the **Billing page** in the sidebar. Enter your card number, expiry, and CVC.
-        You'll see your next billing date and can change or cancel at any time.
+        Once plans launch, go to the **Billing page** and pick a plan. Your card details are
+        entered on Stripe's secure page -- they never touch Trochiá.
 
-        #### Cancelling
-        Cancel anytime from the Billing page. Access continues until the end of your current
-        billing period - you will not be charged again.
+        #### Changing plans or cancelling
+        From Billing > **Manage subscription** you can switch plans, update your card, or see
+        invoices. If you cancel, you keep access until the end of the month you've paid for and
+        won't be charged again.
 
         #### Questions
-        Use AI Chat for billing questions or email trochia.connect@gmail.com.
+        Email trochia.connect@gmail.com.
         """)
         _, c, _ = st.columns([1,1,1])
         with c:
