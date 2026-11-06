@@ -1,0 +1,80 @@
+# Weekly forecast refresh in the cloud, so it no longer depends on a laptop
+# being on. Same steps as scripts/retrain_weekly.ps1. Publishes refreshed data
+# (never code) only if the data-health checks and trust tests pass; the live
+# site redeploys from the new commit.
+#
+# Needs repo secrets (Settings > Secrets and variables > Actions):
+#   FRED_API_KEY, USDA_API_KEY, ALPHA_VANTAGE_API_KEY
+# Run it by hand any time: Actions tab > Weekly forecast refresh > Run workflow.
+name: Weekly forecast refresh
+
+on:
+  schedule:
+    - cron: "0 9 * * 0"   # Sundays 09:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-retrain
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install (CPU-only PyTorch -- the default build is several GB of GPU code)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-train.txt
+
+      - name: Restore trained models from last week (best effort)
+        uses: actions/cache@v4
+        with:
+          path: data/models
+          key: models-${{ github.run_id }}
+          restore-keys: models-
+
+      - name: Fetch fresh data (FRED, USDA, futures history)
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
+        run: python main.py
+
+      - name: Re-forecast all commodities
+        run: python src/models/train_pipeline.py --fresh
+
+      - name: Volatility flags and track record
+        run: |
+          python src/models/backfill_volatility.py
+          python src/models/track_record.py
+
+      - name: Data-health checks (stop here if anything is off)
+        env:
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+        run: |
+          python src/models/validate_prices.py
+          python tests/test_trust.py
+
+      - name: Refresh backtest summary
+        run: python scripts/write_backtest_doc.py
+
+      - name: Publish refreshed data
+        run: |
+          git config user.name "trochia-bot"
+          git config user.email "trochia-bot@users.noreply.github.com"
+          git add outputs/forecasts.csv outputs/forecast_history.csv outputs/validation_report.csv \
+                  outputs/second_source_report.csv docs/backtest.md data/raw data/models/*_sarima_params.json
+          if git diff --cached --quiet; then echo "Nothing changed."; exit 0; fi
+          git commit -m "Weekly forecast refresh $(date -u +%F)"
+          git pull --rebase origin main
+          git push origin main

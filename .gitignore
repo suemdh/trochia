@@ -11,12 +11,21 @@ __pycache__/
 *.pyc
 .claude/
 
-# Training-only artifacts -- the website reads outputs/forecasts.csv, not models
-data/models/
+# Training-only artifacts -- the website reads outputs/forecasts.csv, not models.
+# Exception: tuned SARIMA settings (tiny, but slow to recompute) so the cloud
+# retrain doesn't redo the search every week.
+data/models/*
+!data/models/*_sarima_params.json
 data/processed/
 # Legacy duplicate data folders at repo root; nothing reads these
 /processed/
 /raw/
+
+# Short-lived caches. Committed copies look freshly written after a checkout,
+# so a cloud run or a fresh deploy would serve stale "live" prices from them.
+data/raw/yfinance_live.json
+data/raw/yfinance_contracts.json
+data/raw/av_*.json
 
 # Runtime logs (regenerated; may be large)
 outputs/retrain_log_*.txt
