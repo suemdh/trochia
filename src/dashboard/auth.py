@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 USERS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "users.json")
 TRIAL_DAYS = 14
+# How many commodities a plan includes; plans not listed see every commodity.
+PLAN_COMMODITY_LIMIT = {"Starter": 5}
 TERMS_VERSION = "2026-11-06"  # bump when the Terms/Privacy text in views/legal.py changes
 PBKDF2_ITERATIONS = 600_000  # OWASP's current recommendation for PBKDF2-SHA256
 
@@ -134,6 +136,9 @@ def save_commodity_prefs(email: str, prefs: list):
     key   = email.lower().strip()
     if key not in users:
         return
+    limit = PLAN_COMMODITY_LIMIT.get(users[key].get("plan"))
+    if limit:
+        prefs = prefs[:limit]  # enforced here too, not just by the picker on the page
     users[key]["commodity_prefs"] = prefs
     _save_users(users)
     if st.session_state.get("user", {}).get("email") == key:

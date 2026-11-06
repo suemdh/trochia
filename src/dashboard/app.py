@@ -21,7 +21,7 @@ for _p in [_DASH, _SRC, _ROOT]:
         sys.path.insert(0, _p)
 
 from styles import DARK_CSS
-from auth import get_current_user, logout
+from auth import get_current_user, logout, PLAN_COMMODITY_LIMIT
 from views import home, market, billing, chat
 from views import commodities as commodities_view
 from views import help_page, pricing, account, legal
@@ -108,6 +108,9 @@ def build_commodities():
     # Apply commodity_prefs filter for logged-in users
     user  = get_current_user()
     prefs = (user or {}).get("commodity_prefs", [])
+    limit = PLAN_COMMODITY_LIMIT.get((user or {}).get("plan"))
+    if limit:
+        prefs = prefs[:limit]  # e.g. Starter: only their chosen 5, even if more are saved
 
     # Build from forecasts.csv if available
     if df is not None and not df.empty:
@@ -204,7 +207,7 @@ def build_commodities():
                 "ticker":            YFINANCE_COMMODITY_MAP.get(name, (None, None))[0],
                 "contract":          contracts.get(YFINANCE_COMMODITY_MAP.get(name, (None,))[0]),
             }
-        if prefs:
+        if prefs or limit:
             result = {k: v for k, v in result.items() if k in prefs}
         result = dict(sorted(result.items(),
                              key=lambda x: ({"RED":0,"YELLOW":1,"GREEN":2}.get(x[1]["signal"],3), -abs(x[1]["pct"]))))
@@ -323,7 +326,14 @@ def main():
     commodities, is_live = build_commodities()
     page, refresh_secs = render_sidebar(is_live)
 
-    if not commodities and page in ("Home", "Market", "Commodities"):
+    user = get_current_user()
+    plan_limit = PLAN_COMMODITY_LIMIT.get((user or {}).get("plan"))
+    if plan_limit and not (user or {}).get("commodity_prefs") and page in ("Home", "Market", "Commodities"):
+        st.info(f"Your {user['plan']} plan includes up to {plan_limit} commodities. "
+                f"Choose yours on the Profile page to see their prices and forecasts.")
+        if st.button("Choose my commodities", type="primary"):
+            st.session_state.page = "Profile"; st.rerun()
+    elif not commodities and page in ("Home", "Market", "Commodities"):
         st.error("Forecast data is unavailable right now -- no prices or signals are "
                  "shown rather than showing stale or placeholder numbers. Please check "
                  "back shortly.")

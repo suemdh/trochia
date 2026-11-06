@@ -4,7 +4,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth import (login_form, signup_form, logout, get_current_user, save_commodity_prefs,
-                  request_password_reset, reset_password)
+                  request_password_reset, reset_password, PLAN_COMMODITY_LIMIT)
 from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP
 import mailer
 
@@ -71,29 +71,37 @@ def _render_dashboard(user: dict):
             unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
+    limit = PLAN_COMMODITY_LIMIT.get(plan)
     st.markdown('<div class="sec-header">My Commodities</div>', unsafe_allow_html=True)
-    st.markdown('<p style="color:#8BA0B0;font-size:0.82rem;margin-bottom:0.5rem;">'
-                'Choose which commodities appear on your Market and Home pages. '
-                'Leave empty to see all.</p>', unsafe_allow_html=True)
+    hint = (f"Your {plan} plan includes up to {limit} commodities. Choose the ones you want to follow."
+            if limit else "Choose which commodities appear on your Market and Home pages. Leave empty to see all.")
+    st.markdown(f'<p style="color:#8BA0B0;font-size:0.82rem;margin-bottom:0.5rem;">{hint}</p>',
+                unsafe_allow_html=True)
 
     current_prefs = user.get("commodity_prefs", [])
     selected = st.multiselect(
         "Track these commodities",
         options=ALL_COMMODITIES,
-        # Saved lists may still hold since-removed items; Streamlit errors on
-        # a default that isn't among the options.
-        default=[p for p in current_prefs if p in ALL_COMMODITIES],
+        # Saved lists may still hold since-removed items (Streamlit errors on a
+        # default not among the options), or more than a downgraded plan allows
+        # (Streamlit errors on a default longer than max_selections).
+        default=[p for p in current_prefs if p in ALL_COMMODITIES][:limit],
+        max_selections=limit,
         label_visibility="collapsed",
     )
     col_save, col_clear = st.columns([2, 1])
     with col_save:
         if st.button("Save Preferences", use_container_width=True, type="primary"):
             save_commodity_prefs(user["email"], selected)
-            st.success(f"Tracking {len(selected)} commodit{'y' if len(selected)==1 else 'ies'}" if selected else "Showing all commodities")
-    with col_clear:
-        if st.button("Show All", use_container_width=True):
-            save_commodity_prefs(user["email"], [])
-            st.rerun()
+            if selected:
+                st.success(f"Tracking {len(selected)} commodit{'y' if len(selected)==1 else 'ies'}")
+            else:
+                st.success(f"Pick up to {limit} commodities to see them." if limit else "Showing all commodities")
+    if not limit:
+        with col_clear:
+            if st.button("Show All", use_container_width=True):
+                save_commodity_prefs(user["email"], [])
+                st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("Sign Out", use_container_width=True):

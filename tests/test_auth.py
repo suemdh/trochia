@@ -143,6 +143,56 @@ def test_signup_requires_agreeing_to_terms_and_records_it():
     assert consent.get("version") == auth.TERMS_VERSION and consent.get("at"), consent
 
 
+SEVEN = ["Corn", "Wheat", "Eggs", "Milk", "Butter", "Cheese", "Chicken"]
+
+
+def _market_as(plan, prefs):
+    at = AppTest.from_file(APP, default_timeout=120)
+    at.session_state["page"] = "Market"
+    at.session_state["user"] = {"email": "s@test.com", "name": "S", "plan": plan, "joined": "2026-11-01",
+                                "commodity_prefs": prefs}
+    at.run()
+    assert not at.exception, at.exception
+    return at
+
+
+def test_starter_sees_at_most_five():
+    at = _market_as("Starter", SEVEN)
+    shown = [e.label.split("  ·")[0] for e in at.expander]
+    assert shown and set(shown) <= set(SEVEN[:5]) and len(shown) <= 5, shown
+
+
+def test_starter_without_picks_is_asked_to_choose():
+    at = _market_as("Starter", [])
+    assert not at.expander, "Starter with no picks saw commodities anyway"
+    assert any("up to 5" in i.value for i in at.info)
+
+
+def test_pro_is_not_limited():
+    at = _market_as("Pro", SEVEN)
+    assert len(at.expander) == 7
+    at = _market_as("Pro", [])
+    assert len(at.expander) > 5, "Pro with no picks should see everything"
+
+
+def test_saving_more_than_the_limit_is_trimmed():
+    _reset_store()
+    users = _users()
+    users["me@test.com"]["plan"] = "Starter"
+    json.dump(users, open(TMP, "w"))
+    auth.save_commodity_prefs("me@test.com", SEVEN)
+    assert _users()["me@test.com"]["commodity_prefs"] == SEVEN[:5]
+
+
+def test_profile_handles_downgrade_with_too_many_picks():
+    at = AppTest.from_file(APP, default_timeout=120)
+    at.session_state["page"] = "Profile"
+    at.session_state["user"] = {"email": "s@test.com", "name": "S", "plan": "Starter", "joined": "2026-11-01",
+                                "commodity_prefs": SEVEN}
+    at.run()
+    assert not at.exception, at.exception
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in list(globals().items()) if n.startswith("test_")]
     failed = 0
