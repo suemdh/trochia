@@ -1,0 +1,25 @@
+# One-click deploy on Render (render.com): New + > Blueprint > pick this repo.
+# Paid web services stay awake (no "app is in the oven" wait for visitors).
+# Values marked sync:false are entered in Render's dashboard, never committed.
+services:
+  - type: web
+    name: trochia
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run src/dashboard/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: APP_BASE_URL        # the site's public address, e.g. https://trochia.onrender.com
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
