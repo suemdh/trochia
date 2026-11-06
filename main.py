@@ -20,7 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.data import fetch_fred, fetch_usda
+from src.data import fetch_fred, fetch_usda, fetch_yfinance
 
 
 def ensure_dirs():
@@ -51,6 +51,18 @@ def run_pipeline():
             print(f"Saved {name}: {len(df)} rows")
     except Exception as e:
         print(f"USDA fetch failed: {e}")
+
+    # Futures history (oil, grains, metals, livestock). This used to be fetched
+    # only once, when a file didn't exist yet, so every weekly retrain kept
+    # training on history that stopped in September -- while comparing it to
+    # today's live price.
+    print("\n-- Yahoo Finance futures history --")
+    try:
+        failed = fetch_yfinance.save_all_history()
+        if failed:
+            print(f"WARNING: {len(failed)} futures not refreshed: {failed}")
+    except Exception as e:
+        print(f"Futures history fetch failed: {e}")
 
     print("\n" + "=" * 60)
     print("DONE. Next steps:")

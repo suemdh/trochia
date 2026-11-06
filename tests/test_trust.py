@@ -97,6 +97,20 @@ def test_stale_data_is_refused():
     assert info["too_stale"] and info["estimated_price"] is None
 
 
+def test_price_history_is_fresh():
+    # Futures history was once fetched only on first run, so forecasts quietly
+    # trained on data that stopped seven weeks earlier. Weekly data: 14 days max.
+    from commodity_maps import yfinance_safe_name
+    today = pd.Timestamp.now().normalize()
+    stale = []
+    for name in YFINANCE_COMMODITY_MAP:
+        path = os.path.join(ROOT, "data", "raw", f"yfinance_{yfinance_safe_name(name)}.csv")
+        last = pd.to_datetime(pd.read_csv(path)["date"]).max()
+        if (today - last).days > 14:
+            stale.append(f"{name} ({last.date()})")
+    assert not stale, f"price history more than 14 days old: {stale}"
+
+
 def test_password_hashing():
     sys.path.insert(0, os.path.join(ROOT, "src", "dashboard"))
     import hashlib

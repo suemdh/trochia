@@ -185,6 +185,10 @@ def fetch_history(ticker: str, period: str = "10y", interval: str = "1wk") -> pd
                           auto_adjust=True, progress=False)
         if raw.empty:
             return pd.DataFrame()
+        # Newer yfinance returns (field, ticker) two-level columns even for one
+        # ticker; flatten or the CSV gets a two-row header nothing can read back.
+        if isinstance(raw.columns, pd.MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
         df = raw[["Close"]].copy()
         df.index = pd.to_datetime(df.index)
         df = df.rename(columns={"Close": "value"})
@@ -198,9 +202,12 @@ def fetch_history(ticker: str, period: str = "10y", interval: str = "1wk") -> pd
         return pd.DataFrame()
 
 
-def save_all_history():
-    """Download and save 2-year weekly history for all tickers to data/raw/."""
+def save_all_history() -> list:
+    """Download and save 10-year weekly history for all tickers to data/raw/.
+    Returns the tickers that failed; their previous files are left untouched
+    (never overwritten with nothing)."""
     os.makedirs(RAW_DIR, exist_ok=True)
+    failed = []
     for ticker, (name, unit, scale) in TICKERS.items():
         safe_name = name.lower().replace(" ", "_").replace("/", "_").replace("(", "").replace(")", "")
         out_path = os.path.join(RAW_DIR, f"yfinance_{safe_name}.csv")
@@ -210,8 +217,10 @@ def save_all_history():
             df.to_csv(out_path, index=False)
             print(f"    Saved {len(df)} rows to {out_path}")
         else:
-            print(f"    No data for {ticker}")
+            failed.append(ticker)
+            print(f"    No data for {ticker} -- keeping the previous file")
         time.sleep(0.5)
+    return failed
 
 
 if __name__ == "__main__":
