@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 USERS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "users.json")
 TRIAL_DAYS = 14
+TERMS_VERSION = "2026-11-06"  # bump when the Terms/Privacy text in views/legal.py changes
 PBKDF2_ITERATIONS = 600_000  # OWASP's current recommendation for PBKDF2-SHA256
 
 
@@ -193,10 +194,13 @@ def signup_form():
         email    = st.text_input("Email address")
         password = st.text_input("Password (min 8 chars)", type="password")
         confirm  = st.text_input("Confirm password", type="password")
+        agreed   = st.checkbox("I agree to the Terms of Service and Privacy Policy (see Legal in the menu)")
         submitted = st.form_submit_button("Start Free Trial", use_container_width=True, type="primary")
     if submitted:
         if not all([name, email, password, confirm]):
             st.error("Please fill in all fields."); return
+        if not agreed:
+            st.error("Please agree to the Terms of Service and Privacy Policy to create an account."); return
         if password != confirm:
             st.error("Passwords do not match."); return
         if len(password) < 8:
@@ -215,6 +219,8 @@ def signup_form():
             "card_last4":      None,
             "next_bill":       None,
             "commodity_prefs": [],
+            # Record of consent: which Terms version they agreed to, and when.
+            "agreed_terms":    {"version": TERMS_VERSION, "at": datetime.now(timezone.utc).isoformat()},
         }
         _save_users(users)
         st.session_state.user = _build_session_user(key, users[key])

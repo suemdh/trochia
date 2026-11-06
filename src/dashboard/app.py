@@ -24,7 +24,7 @@ from styles import DARK_CSS
 from auth import get_current_user, logout
 from views import home, market, billing, chat
 from views import commodities as commodities_view
-from views import help_page, pricing, account
+from views import help_page, pricing, account, legal
 from commodity_maps import TOTAL_COMMODITIES, PLAUSIBLE_RANGE, YFINANCE_COMMODITY_MAP
 from decision.engine import evaluate, ForecastInput
 
@@ -217,7 +217,7 @@ def build_commodities():
     return {}, False
 
 # â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-NAV = ["Home", "Market", "Commodities", "Chat", "Help", "Pricing", "Billing", "Profile"]
+NAV = ["Home", "Market", "Commodities", "Chat", "Help", "Pricing", "Billing", "Profile", "Legal"]
 
 def _logo_b64() -> str | None:
     png = os.path.join(ASSETS, "trochia_logo.png")
@@ -343,6 +343,8 @@ def main():
         billing.render()
     elif page == "Profile":
         account.render()
+    elif page == "Legal":
+        legal.render()
 
     _render_logo_click_handler()
 

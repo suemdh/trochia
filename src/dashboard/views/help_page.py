@@ -300,7 +300,7 @@ def render():
         billing period - you will not be charged again.
 
         #### Questions
-        Use AI Chat for billing questions or email support@trochia.com.
+        Use AI Chat for billing questions or email trochia.connect@gmail.com.
         """)
         _, c, _ = st.columns([1,1,1])
         with c:

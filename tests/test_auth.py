@@ -117,6 +117,32 @@ def test_reset_link_opens_form_and_sets_password():
     assert any("Password updated" in m.value for m in at.success)
 
 
+def _signup(agree: bool):
+    _reset_store()
+    at = AppTest.from_file(APP, default_timeout=120)
+    at.session_state["page"] = "Profile"
+    at.run()
+    field = {t.label: t for t in at.text_input}
+    field["Full name"].input("New Person")
+    field["Email address"].input("new@test.com")
+    field["Password (min 8 chars)"].input("password-123")
+    field["Confirm password"].input("password-123")
+    if agree:
+        next(c for c in at.checkbox if "Terms of Service" in c.label).check()
+    next(b for b in at.button if b.label == "Start Free Trial").click().run()
+    assert not at.exception, at.exception
+    return at
+
+
+def test_signup_requires_agreeing_to_terms_and_records_it():
+    at = _signup(agree=False)
+    assert "new@test.com" not in _users(), "account created without agreeing to the Terms"
+    assert any("agree" in e.value for e in at.error)
+    _signup(agree=True)
+    consent = _users()["new@test.com"].get("agreed_terms", {})
+    assert consent.get("version") == auth.TERMS_VERSION and consent.get("at"), consent
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in list(globals().items()) if n.startswith("test_")]
     failed = 0
