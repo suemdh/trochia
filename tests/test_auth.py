@@ -23,6 +23,7 @@ from streamlit.testing.v1 import AppTest
 TMP = os.path.join(tempfile.mkdtemp(), "users.json")
 auth.USERS_FILE = TMP
 SENT = []
+_REAL_SEND = mailer.send_email
 mailer.send_email = lambda to, subject, body: SENT.append((to, body))
 mailer.is_configured = lambda: True
 
@@ -191,6 +192,42 @@ def test_profile_handles_downgrade_with_too_many_picks():
                                 "commodity_prefs": SEVEN}
     at.run()
     assert not at.exception, at.exception
+
+
+def test_mailer_uses_the_right_connection_and_sender():
+    import smtplib
+    calls = []
+
+    class FakeServer:
+        def __init__(self, host, port, timeout=None): calls.append(("open", type(self).__name__, host, port))
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def starttls(self): calls.append(("starttls",))
+        def login(self, user, pw): calls.append(("login", user, pw))
+        def send_message(self, msg): calls.append(("from", msg["From"]))
+
+    class SMTP(FakeServer): pass
+    class SMTP_SSL(FakeServer): pass
+    real = (smtplib.SMTP, smtplib.SMTP_SSL)
+    smtplib.SMTP, smtplib.SMTP_SSL = SMTP, SMTP_SSL
+    env = {"SMTP_USER": "login@relay", "SMTP_PASSWORD": "ab cd ef", "SMTP_FROM": "trochia.connect@gmail.com",
+           "SMTP_HOST": "smtp-relay.brevo.com", "SMTP_PORT": "587"}
+    saved = {k: os.environ.get(k) for k in env}
+    try:
+        os.environ.update(env)
+        _REAL_SEND("x@test.com", "s", "b")            # Brevo-style: 587 + STARTTLS
+        assert ("open", "SMTP", "smtp-relay.brevo.com", 587) in calls and ("starttls",) in calls
+        assert ("login", "login@relay", "abcdef") in calls, "spaces in the key not removed"
+        assert any(c[0] == "from" and "trochia.connect@gmail.com" in c[1] for c in calls), calls
+        calls.clear()
+        os.environ.update({"SMTP_PORT": "465", "SMTP_HOST": "smtp.gmail.com"})
+        _REAL_SEND("x@test.com", "s", "b")            # Gmail-style: 465, SSL from the start
+        assert ("open", "SMTP_SSL", "smtp.gmail.com", 465) in calls and ("starttls",) not in calls
+    finally:
+        smtplib.SMTP, smtplib.SMTP_SSL = real
+        for k, v in saved.items():
+            if v is None: os.environ.pop(k, None)
+            else: os.environ[k] = v
 
 
 def _market(key, user=None):
