@@ -194,11 +194,23 @@ def sync_billing(email: str) -> dict | None:
     users = _load_users()
     if email not in users:
         return None
+    checked = False
     try:
         import billing_stripe
-        fields = billing_stripe.sync_subscription(email) if billing_stripe.is_stripe_enabled() else None
+        if billing_stripe.is_stripe_enabled():
+            fields = billing_stripe.sync_subscription(email)
+            checked = True
+        else:
+            fields = None
     except Exception:
-        fields = None
+        fields = None  # Stripe unreachable: keep the stored plan (checked stays False)
+    if checked and fields is None and users[email].get("stripe_customer_id"):
+        # Stripe answered and has never seen this person, yet the stored plan
+        # points at a Stripe customer: that subscription lives in a different
+        # Stripe account or mode (e.g. test-mode data after going live, or
+        # after switching accounts). It isn't paying here, so stop granting it.
+        fields = {"plan": "Trial", "billing_status": "cancelled", "next_bill": None,
+                  "card_last4": None, "stripe_subscription_id": None, "stripe_customer_id": None}
     if fields and any(users[email].get(k) != v for k, v in fields.items()):
         users[email].update(fields)
         _save_users(users)

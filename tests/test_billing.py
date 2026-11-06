@@ -204,6 +204,24 @@ def test_stripe_outage_never_blocks_sign_in():
     assert stored and stored["plan"] == "Pro", "outage changed or lost the account"
 
 
+def test_subscription_from_another_stripe_account_stops_granting_access():
+    # e.g. test-mode subscribers after going live, or after switching Stripe accounts
+    _reset(plan="Pro", billing_status="active", stripe_customer_id="cus_old_account",
+           stripe_subscription_id="sub_old")
+    billing_stripe.sync_subscription = lambda email: None   # this account has never seen them
+    auth.sync_billing("payer@test.com")
+    billing_stripe.sync_subscription = lambda email: None
+    u = _users()["payer@test.com"]
+    assert u["plan"] == "Trial" and u["stripe_customer_id"] is None, u
+
+
+def test_never_subscribed_trial_user_is_untouched_by_sync():
+    _reset()  # Trial, no Stripe customer
+    billing_stripe.sync_subscription = lambda email: None
+    auth.sync_billing("payer@test.com")
+    assert _users()["payer@test.com"]["billing_status"] == "trial"
+
+
 def test_sync_billing_applies_stripe_state():
     _reset()  # site thinks Trial -- e.g. the return link was never processed
     billing_stripe.sync_subscription = lambda email: {"plan": "Pro", "billing_status": "active",
@@ -215,12 +233,19 @@ def test_sync_billing_applies_stripe_state():
 
 def _billing_buttons(**payer):
     _reset(**payer)
-    at = AppTest.from_file(APP, default_timeout=120)
-    at.session_state["page"] = "Billing"
-    at.session_state["user"] = auth._build_session_user("payer@test.com", _users()["payer@test.com"])
-    at.run()
-    assert not at.exception, at.exception
-    return [b.label for b in at.button]
+    # Stripe agrees with what's stored (a real subscriber), so the Billing
+    # page's sync leaves the account as is.
+    billing_stripe.sync_subscription = lambda email: {
+        k: payer[k] for k in ("plan", "billing_status", "stripe_customer_id") if k in payer}
+    try:
+        at = AppTest.from_file(APP, default_timeout=120)
+        at.session_state["page"] = "Billing"
+        at.session_state["user"] = auth._build_session_user("payer@test.com", _users()["payer@test.com"])
+        at.run()
+        assert not at.exception, at.exception
+        return [b.label for b in at.button]
+    finally:
+        billing_stripe.sync_subscription = lambda email: None
 
 
 def test_subscriber_gets_portal_not_a_second_checkout():
