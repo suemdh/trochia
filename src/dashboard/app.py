@@ -316,6 +316,9 @@ def main():
     # the session, rather than silently dropping the confirmation on Home.
     if "checkout" in st.query_params:
         st.session_state.page = "Billing"
+    # Password-reset links from email land on Profile, where the form lives.
+    if "reset" in st.query_params:
+        st.session_state.page = "Profile"
 
     commodities, is_live = build_commodities()
     page, refresh_secs = render_sidebar(is_live)

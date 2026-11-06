@@ -4,9 +4,10 @@ Accounts live in Postgres (Supabase) when SUPABASE_DB_URL is set -- required on
 the hosted site, whose disk is wiped on every restart -- and in a local JSON
 file otherwise (laptop dev). Same data shape either way: {email: {...fields}}.
 """
-import hashlib, hmac, json, os
+import hashlib, hmac, json, os, secrets
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -263,6 +264,80 @@ def cancel_subscription(email: str, at_period_end: bool = True):
         users[email]["stripe_subscription_id"]  = None
     _save_users(users)
     st.session_state.user = _build_session_user(email, users[email])
+
+
+RESET_TTL_MINUTES = 30
+RESET_COOLDOWN_SECONDS = 120
+
+
+def _app_url() -> str:
+    url = os.getenv("APP_BASE_URL")
+    if not url:
+        try:
+            url = st.secrets.get("APP_BASE_URL")
+        except Exception:
+            url = None
+    return (url or "http://localhost:8501").rstrip("/")
+
+
+def _token_hash(token: str) -> str:
+    # Only a hash of the reset token is stored, so a leaked user table doesn't
+    # hand out working reset links. Plain SHA-256 is enough here (unlike for
+    # passwords): the token is 256 random bits, not a guessable human choice.
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def request_password_reset(email: str) -> bool:
+    """Emails a single-use, 30-minute reset link if the account exists.
+    Returns False only if the email couldn't be sent. Callers must show the
+    same message either way, so the form can't reveal who has an account."""
+    import mailer
+    key = email.lower().strip()
+    users = _load_users()
+    user = users.get(key)
+    if not user:
+        return True
+    now = datetime.now(timezone.utc)
+    last = user.get("reset_requested_at")
+    if last and (now - datetime.fromisoformat(last)).total_seconds() < RESET_COOLDOWN_SECONDS:
+        return True  # cooldown: the form can't be used to flood someone's inbox
+    token = secrets.token_urlsafe(32)
+    user["reset_token_hash"] = _token_hash(token)
+    user["reset_expires"] = (now + timedelta(minutes=RESET_TTL_MINUTES)).isoformat()
+    user["reset_requested_at"] = now.isoformat()
+    _save_users(users)
+    link = f"{_app_url()}/?reset={token}&email={quote(key)}"
+    try:
+        mailer.send_email(key, "Reset your Trochiá password", (
+            f"Hi {user['name']},\n\n"
+            f"Someone (hopefully you) asked to reset the password for your Trochiá account.\n\n"
+            f"Choose a new password here -- the link works once, for {RESET_TTL_MINUTES} minutes:\n"
+            f"{link}\n\n"
+            f"If you didn't ask for this, you can ignore this email; your password won't change.\n\n"
+            f"-- Trochiá"))
+    except Exception:
+        return False
+    return True
+
+
+def reset_password(email: str, token: str, new_password: str) -> str | None:
+    """Sets a new password from a reset link. Returns None on success, else the
+    message to show. The link stops working after one use or 30 minutes."""
+    if len(new_password) < 8:
+        return "Password must be at least 8 characters."
+    key = email.lower().strip()
+    users = _load_users()
+    user = users.get(key)
+    stored = (user or {}).get("reset_token_hash")
+    if not stored or not hmac.compare_digest(stored, _token_hash(token)):
+        return "This reset link is invalid or has already been used. Request a new one."
+    if datetime.now(timezone.utc) > datetime.fromisoformat(user["reset_expires"]):
+        return "This reset link has expired. Request a new one."
+    user["password_hash"] = _hash(new_password)
+    for k in ("reset_token_hash", "reset_expires"):
+        user.pop(k, None)
+    _save_users(users)
+    return None
 
 
 def logout():

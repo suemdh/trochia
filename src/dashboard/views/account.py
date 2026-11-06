@@ -3,7 +3,10 @@ import sys, os
 import streamlit as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from auth import login_form, signup_form, logout, get_current_user, save_commodity_prefs
+from auth import (login_form, signup_form, logout, get_current_user, save_commodity_prefs,
+                  request_password_reset, reset_password)
+from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP
+import mailer
 
 PLAN_COLOR = {"Starter":"#007A8E","Pro":"#21C55D","Business":"#F0B429","Trial":"#A8DBB9"}
 PLAN_FEATURES = {
@@ -13,16 +16,9 @@ PLAN_FEATURES = {
     "Business": ["Everything in Pro", "API access", "10 user seats", "Dedicated support"],
 }
 
-ALL_COMMODITIES = [
-    "Ground Beef","Chicken","Pork / Bacon","Pork Chops","Ham","Tuna (Canned)",
-    "Eggs","Butter","Milk","Cheese","White Bread","Flour","Peanut Butter",
-    "Sugar (Retail)","Coffee (Retail)","Bananas","Potatoes","Tomatoes","Oranges","Apples",
-    "Diesel / Freight","Gasoline",
-    "Crude Oil (Brent)","Crude Oil (WTI)","Natural Gas","Gasoline (RBOB)","Heating Oil",
-    "Wheat","Corn","Soybeans","Soybean Oil","Oats","Rough Rice",
-    "Coffee (Arabica)","Cocoa","Sugar (11)","Cotton","Orange Juice",
-    "Live Cattle","Lean Hogs","Feeder Cattle","Lumber","Copper","Gold","Silver",
-]
+# The commodities actually forecast -- this used to be a hand-typed copy that
+# still offered discontinued items (Tuna, Peanut Butter, Apples, Lumber).
+ALL_COMMODITIES = [*FRED_COMMODITY_MAP, *USDA_COMMODITY_MAP, *YFINANCE_COMMODITY_MAP]
 
 
 def render():
@@ -83,7 +79,9 @@ def _render_dashboard(user: dict):
     selected = st.multiselect(
         "Track these commodities",
         options=ALL_COMMODITIES,
-        default=current_prefs if current_prefs else [],
+        # Saved lists may still hold since-removed items; Streamlit errors on
+        # a default that isn't among the options.
+        default=[p for p in current_prefs if p in ALL_COMMODITIES],
         label_visibility="collapsed",
     )
     col_save, col_clear = st.columns([2, 1])
@@ -102,9 +100,18 @@ def _render_dashboard(user: dict):
 
 
 def _render_auth():
+    msg = st.session_state.pop("_auth_info", None)
+    if msg:
+        st.success(msg)
+    params = st.query_params
+    if params.get("reset") and params.get("email"):
+        _render_reset_form(params["email"], params["reset"])
+        return
+
     t1, t2 = st.tabs(["Sign In", "Create Free Account"])
     with t1:
         login_form()
+        _render_forgot_password()
     with t2:
         signup_form()
         st.markdown("""
@@ -112,3 +119,44 @@ def _render_auth():
             14-day free trial. No credit card required. Cancel anytime.
         </div>
         """, unsafe_allow_html=True)
+
+
+def _render_forgot_password():
+    with st.expander("Forgot your password?"):
+        with st.form("forgot_form"):
+            email = st.text_input("Your account email")
+            sent = st.form_submit_button("Email me a reset link", use_container_width=True)
+        if sent:
+            if not email.strip():
+                st.error("Enter the email you signed up with.")
+            elif not mailer.is_configured():
+                st.error("Password reset isn't available yet -- please contact support.")
+            elif request_password_reset(email):
+                # Same message whether or not an account exists, on purpose.
+                st.success("If there's an account for that email, a reset link is on its way. "
+                           "Check your inbox and spam folder -- the link works for 30 minutes.")
+            else:
+                st.error("We couldn't send the email right now. Please try again in a few minutes.")
+
+
+def _render_reset_form(email: str, token: str):
+    st.markdown("### Set a new password")
+    st.caption(f"For {email}")
+    with st.form("reset_form"):
+        pw = st.text_input("New password (min 8 characters)", type="password")
+        pw2 = st.text_input("Confirm new password", type="password")
+        done = st.form_submit_button("Save new password", use_container_width=True, type="primary")
+    if done:
+        if pw != pw2:
+            st.error("Passwords don't match.")
+        else:
+            err = reset_password(email, token, pw)
+            if err:
+                st.error(err)
+            else:
+                st.query_params.clear()
+                st.session_state["_auth_info"] = "Password updated. Sign in with your new password."
+                st.rerun()
+    if st.button("Back to sign in"):
+        st.query_params.clear()
+        st.rerun()
