@@ -1,8 +1,8 @@
 # Backtest summary
 
-Generated 2026-11-02 from `outputs/forecasts.csv` by `scripts/write_backtest_doc.py`.
+Generated 2026-11-06 from `outputs/forecasts.csv` by `scripts/write_backtest_doc.py`.
 
-**11 of 43 commodities** have a model that beat a simple "price stays the same" forecast in backtesting. Commodities that don't are capped at a YELLOW watch signal on the dashboard and can never trigger a RED buy alert.
+**10 of 43 commodities** have a model that beat a simple "price stays the same" forecast in backtesting. Commodities that don't are capped at a YELLOW watch signal on the dashboard and can never trigger a RED buy alert.
 
 ## Method
 
@@ -15,46 +15,46 @@ Generated 2026-11-02 from `outputs/forecasts.csv` by `scripts/write_backtest_doc
 
 | Commodity | Source | Horizon | Typical error | No-change error | Skill | Beats no-change |
 |---|---|---|---|---|---|---|
-| Copper | yfinance | 8 weeks | ±5.2% | ±9.6% | +0.46 | Yes |
-| Cotton | yfinance | 8 weeks | ±6.6% | ±12.1% | +0.45 | Yes |
+| Cotton | yfinance | 8 weeks | ±5.5% | ±12.7% | +0.57 | Yes |
+| Soybean Oil | yfinance | 8 weeks | ±3.8% | ±6.4% | +0.41 | Yes |
 | Oranges | FRED | 8 months | ±6.7% | ±9.9% | +0.32 | Yes |
-| Soybean Oil | yfinance | 8 weeks | ±6.0% | ±8.6% | +0.30 | Yes |
-| Eggs | FRED | 8 months | ±54.3% | ±72.8% | +0.25 | Yes |
-| Natural Gas | yfinance | 8 weeks | ±10.9% | ±12.5% | +0.13 | Yes |
-| Gasoline | FRED | 8 weeks | ±6.2% | ±7.0% | +0.11 | Yes |
-| Orange Juice | yfinance | 8 weeks | ±12.8% | ±14.3% | +0.11 | Yes |
-| Wheat (USDA Cash) | USDA | 8 days | ±4.0% | ±4.4% | +0.10 | Yes |
-| Sugar (11) | yfinance | 8 weeks | ±7.0% | ±7.7% | +0.09 | Yes |
+| Crude Oil (WTI) | yfinance | 8 weeks | ±12.2% | ±17.7% | +0.31 | Yes |
+| Crude Oil (Brent) | yfinance | 8 weeks | ±13.6% | ±18.4% | +0.26 | Yes |
+| Orange Juice | yfinance | 8 weeks | ±8.2% | ±11.0% | +0.25 | Yes |
+| Natural Gas | yfinance | 8 weeks | ±10.9% | ±13.7% | +0.20 | Yes |
+| Gold | yfinance | 8 weeks | ±8.7% | ±10.5% | +0.17 | Yes |
+| Eggs | FRED | 8 months | ±67.7% | ±73.1% | +0.07 | Yes |
 | Cheese | FRED | 8 months | ±2.7% | ±2.8% | +0.02 | Yes |
+| Diesel / Freight | FRED | 8 weeks | ±8.5% | ±8.4% | -0.02 | No |
 | Chicken | FRED | 8 months | ±2.1% | ±2.0% | -0.02 | No |
 | Milk | FRED | 8 months | ±2.5% | ±2.4% | -0.03 | No |
-| Cream (USDA) | USDA | 8 weeks | ±10.1% | ±9.8% | -0.04 | No |
-| Heating Oil | yfinance | 8 weeks | ±15.0% | ±14.2% | -0.06 | No |
-| Pork Chops | FRED | 8 months | ±2.5% | ±2.4% | -0.06 | No |
-| Butter | FRED | 8 months | ±5.3% | ±4.9% | -0.07 | No |
-| Crude Oil (Brent) | yfinance | 8 weeks | ±11.4% | ±10.6% | -0.08 | No |
-| Live Cattle | yfinance | 8 weeks | ±5.9% | ±5.4% | -0.09 | No |
-| Silver | yfinance | 8 weeks | ±18.2% | ±15.9% | -0.14 | No |
-| Cocoa | yfinance | 8 weeks | ±11.4% | ±9.6% | -0.19 | No |
+| Butter | FRED | 8 months | ±5.3% | ±5.0% | -0.07 | No |
+| Gasoline (RBOB) | yfinance | 8 weeks | ±17.4% | ±16.1% | -0.08 | No |
+| Soybeans | yfinance | 8 weeks | ±5.2% | ±4.8% | -0.09 | No |
+| Pork Chops | FRED | 8 months | ±2.6% | ±2.4% | -0.09 | No |
+| Cream (USDA) | USDA | 8 weeks | ±10.2% | ±8.6% | -0.18 | No |
+| Coffee (Arabica) | yfinance | 8 weeks | ±10.3% | ±8.7% | -0.19 | No |
+| Gasoline | FRED | 8 weeks | ±10.4% | ±8.6% | -0.20 | No |
 | Tomatoes | FRED | 8 months | ±9.7% | ±7.9% | -0.22 | No |
 | Flour | FRED | 8 months | ±3.3% | ±2.7% | -0.23 | No |
-| Gold | yfinance | 8 weeks | ±7.2% | ±5.9% | -0.23 | No |
-| Rough Rice | yfinance | 8 weeks | ±6.8% | ±5.0% | -0.34 | No |
-| Feeder Cattle | yfinance | 8 weeks | ±4.0% | ±2.9% | -0.38 | No |
+| Oats | yfinance | 8 weeks | ±13.1% | ±10.2% | -0.28 | No |
+| Cocoa | yfinance | 8 weeks | ±12.1% | ±9.3% | -0.31 | No |
+| Silver | yfinance | 8 weeks | ±34.0% | ±24.6% | -0.38 | No |
+| Corn | yfinance | 8 weeks | ±10.0% | ±7.1% | -0.40 | No |
 | Ham | FRED | 8 months | ±2.6% | ±1.7% | -0.49 | No |
 | Coffee (Retail) | FRED | 8 months | ±8.9% | ±5.9% | -0.50 | No |
-| Lean Hogs | yfinance | 8 weeks | ±9.6% | ±6.4% | -0.52 | No |
-| Crude Oil (WTI) | yfinance | 8 weeks | ±12.0% | ±7.8% | -0.54 | No |
-| Potatoes | FRED | 8 months | ±5.1% | ±3.3% | -0.58 | No |
-| Oats | yfinance | 8 weeks | ±7.3% | ±4.3% | -0.69 | No |
-| Diesel / Freight | FRED | 8 weeks | ±7.5% | ±4.4% | -0.70 | No |
-| Wheat | yfinance | 8 weeks | ±7.0% | ±3.9% | -0.78 | No |
+| Potatoes | FRED | 8 months | ±5.1% | ±3.2% | -0.58 | No |
+| Wheat (USDA Cash) | USDA | 8 days | ±2.0% | ±1.3% | -0.58 | No |
+| Lean Hogs | yfinance | 8 weeks | ±13.3% | ±8.2% | -0.62 | No |
+| Heating Oil | yfinance | 8 weeks | ±18.6% | ±11.3% | -0.64 | No |
 | Pork / Bacon | FRED | 8 months | ±2.6% | ±1.5% | -0.81 | No |
-| Coffee (Arabica) | yfinance | 8 weeks | ±9.1% | ±4.9% | -0.88 | No |
+| Rough Rice | yfinance | 8 weeks | ±8.6% | ±4.6% | -0.85 | No |
 | Ground Beef | FRED | 8 months | ±3.7% | ±1.9% | -0.93 | No |
+| Wheat | yfinance | 8 weeks | ±8.4% | ±4.1% | -1.05 | No |
 | White Bread | FRED | 8 months | ±4.6% | ±2.2% | -1.06 | No |
-| Soybeans | yfinance | 8 weeks | ±3.8% | ±1.8% | -1.09 | No |
-| Bananas | FRED | 8 months | ±2.8% | ±1.3% | -1.17 | No |
-| Gasoline (RBOB) | yfinance | 8 weeks | ±20.5% | ±8.9% | -1.31 | No |
-| Corn | yfinance | 8 weeks | ±6.3% | ±2.3% | -1.72 | No |
+| Bananas | FRED | 8 months | ±2.8% | ±1.3% | -1.19 | No |
+| Copper | yfinance | 8 weeks | ±4.0% | ±1.6% | -1.49 | No |
+| Sugar (11) | yfinance | 8 weeks | ±11.1% | ±3.6% | -2.12 | No |
+| Live Cattle | yfinance | 8 weeks | ±9.0% | ±2.5% | -2.61 | No |
+| Feeder Cattle | yfinance | 8 weeks | ±14.1% | ±3.5% | -3.01 | No |
 | Sugar (Retail) | FRED | 8 months | ±2.4% | ±0.6% | -3.22 | No |
