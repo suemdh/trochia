@@ -17,6 +17,7 @@ is_stripe_enabled() is checked by billing.py before any of this is called.
 """
 import json
 import os
+from datetime import datetime, timezone
 
 import stripe
 from dotenv import load_dotenv
@@ -93,18 +94,97 @@ def ensure_price_ids() -> dict:
     return cache
 
 
-def create_checkout_session(email: str, plan_name: str) -> str:
-    """Creates a Stripe Checkout Session for `plan_name` and returns its hosted URL."""
+def create_checkout_session(email: str, plan_name: str, customer_id: str | None = None) -> str:
+    """Creates a Stripe Checkout Session for `plan_name` and returns its hosted URL.
+    Reuses the person's existing Stripe customer when known, instead of
+    creating a duplicate customer record on every checkout."""
     price_ids = ensure_price_ids()
+    who = {"customer": customer_id} if customer_id else {"customer_email": email}
     session = stripe.checkout.Session.create(
         mode="subscription",
-        customer_email=email,
+        **who,
         line_items=[{"price": price_ids[plan_name], "quantity": 1}],
         success_url=f"{BASE_URL}/?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{BASE_URL}/?checkout=cancelled",
         metadata={"plan": plan_name, "email": email},
     )
     return session.url
+
+
+PORTAL_CACHE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "stripe_portal.json")
+
+
+def ensure_portal_configuration() -> str:
+    """Stripe's hosted billing portal, configured once to allow switching
+    between the three plans (Stripe's default portal can't switch plans).
+    Cached like the price IDs so it's created only once."""
+    if os.path.exists(PORTAL_CACHE):
+        with open(PORTAL_CACHE) as f:
+            return json.load(f)["configuration"]
+    prices = ensure_price_ids()
+    products = [{"product": stripe.Price.retrieve(pid).product, "prices": [pid]} for pid in prices.values()]
+    cfg = stripe.billing_portal.Configuration.create(
+        business_profile={"headline": "Trochiá -- manage your subscription"},
+        features={
+            "payment_method_update": {"enabled": True},
+            "invoice_history": {"enabled": True},
+            "subscription_cancel": {"enabled": True, "mode": "at_period_end"},
+            "subscription_update": {"enabled": True, "default_allowed_updates": ["price"],
+                                    "proration_behavior": "create_prorations", "products": products},
+        },
+    )
+    os.makedirs(os.path.dirname(PORTAL_CACHE), exist_ok=True)
+    with open(PORTAL_CACHE, "w") as f:
+        json.dump({"configuration": cfg.id}, f, indent=2)
+    return cfg.id
+
+
+def create_portal_session(customer_id: str) -> str:
+    """Stripe-hosted page to change plan, update the card, cancel, or see
+    invoices. Plan changes go through here rather than a new checkout -- a
+    second checkout would start a second subscription and bill twice."""
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id, configuration=ensure_portal_configuration(),
+        return_url=f"{BASE_URL}/?checkout=portal")
+    return session.url
+
+
+# Stripe statuses where the customer still has access. past_due = a renewal
+# failed and Stripe is retrying the card; access continues meanwhile.
+_ACCESS_STATUSES = ("active", "trialing", "past_due")
+
+
+def sync_subscription(email: str) -> dict | None:
+    """Asks Stripe for this person's current subscription and returns the
+    account fields to store -- Stripe is the source of truth, so plan changes,
+    failed renewals, and cancellations made in the portal or by Stripe itself
+    all reach the site the next time they sign in or open Billing.
+    Returns None if Stripe has never seen this email (never checked out)."""
+    customers = stripe.Customer.list(email=email, limit=10).data
+    if not customers:
+        return None
+    subs = [s for c in customers
+            for s in stripe.Subscription.list(customer=c.id, status="all", limit=20).data]
+    live = sorted((s for s in subs if s.status in _ACCESS_STATUSES),
+                  key=lambda s: s.created, reverse=True)
+    if not live:
+        return {"plan": "Trial", "billing_status": "cancelled", "next_bill": None, "card_last4": None,
+                "stripe_subscription_id": None, "stripe_customer_id": customers[0].id}
+
+    sub = live[0]
+    item = sub["items"].data[0]  # sub.items would hit the dict-method name
+    end = getattr(sub, "current_period_end", None) or getattr(item, "current_period_end", None)
+    plan = {pid: name for name, pid in _load_price_cache().items()}.get(item.price.id)
+    fields = {
+        "billing_status": ("past_due" if sub.status == "past_due"
+                           else "cancelling" if sub.cancel_at_period_end else "active"),
+        "next_bill": datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d") if end else None,
+        "stripe_subscription_id": sub.id,
+        "stripe_customer_id": sub.customer if isinstance(sub.customer, str) else sub.customer.id,
+    }
+    if plan:  # an unrecognised price: don't guess a plan name
+        fields["plan"] = plan
+    return fields
 
 
 def retrieve_paid_session(session_id: str) -> dict | None:

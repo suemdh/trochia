@@ -9,6 +9,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 from commodity_maps import TOTAL_COMMODITIES
 import billing_stripe
 
+STATUS_LABEL = {"active": "Active", "cancelling": "Cancels at period end",
+                "past_due": "Payment failed", "cancelled": "Cancelled", "trial": "Trial"}
+
 PLANS = {
     "Starter":  {"price": 19,  "color": "#007A8E", "desc": "For individual operators"},
     "Pro":      {"price": 49,  "color": "#21C55D", "desc": "For growing businesses"},
@@ -48,14 +51,25 @@ def _handle_stripe_return(user: dict | None):
         st.query_params.clear()
         st.session_state["_billing_info"] = "Checkout cancelled -- no charge was made."
         st.rerun()
+    elif checkout == "portal":
+        # Back from Stripe's billing portal. Like any return from Stripe this is
+        # a fresh session; the page below re-syncs from Stripe once signed in.
+        st.query_params.clear()
+        st.session_state["_billing_info"] = ("Your subscription below is up to date with Stripe." if user
+                                             else "Back from Stripe. Sign in to see any changes to your subscription.")
+        st.rerun()
 
 
 def render():
-    from auth import get_current_user, update_plan, cancel_subscription
+    from auth import get_current_user
     st.markdown('<div class="sec-header">Billing & Subscription</div>', unsafe_allow_html=True)
 
     user = get_current_user()
     _handle_stripe_return(user)
+    if user:
+        from auth import sync_billing
+        sync_billing(user["email"])  # Stripe is the source of truth for the plan
+        user = get_current_user()
 
     for key, kind in [("_billing_toast", "success"), ("_billing_error", "error"), ("_billing_info", "info")]:
         msg = st.session_state.pop(key, None)
@@ -97,7 +111,7 @@ def _render_status_bar(user: dict):
 
     b1, b2, b3, b4 = st.columns(4)
     b1.metric("Current Plan", plan)
-    b2.metric("Status", status.title())
+    b2.metric("Status", STATUS_LABEL.get(status, status.title()))
 
     if plan == "Trial":
         days = user.get("trial_days_left", 14)
@@ -106,7 +120,7 @@ def _render_status_bar(user: dict):
         b4.metric("Trial Ends", trial_end)
     else:
         b3.metric("Monthly Cost", f"${PLANS[plan]['price']}/mo")
-        b4.metric("Next Billing", user.get("next_bill", "-"))
+        b4.metric("Access Until" if status == "cancelling" else "Next Billing", user.get("next_bill") or "-")
 
 
 def _render_trial_upsell(user: dict):
@@ -138,30 +152,40 @@ def _render_trial_upsell(user: dict):
 
 def _render_active_billing(user: dict):
     from auth import cancel_subscription
-    plan  = user["plan"]
-    info  = PLANS.get(plan, {})
+    plan   = user["plan"]
+    info   = PLANS.get(plan, {})
+    status = user.get("billing_status", "active")
+    until  = user.get("next_bill") or "the end of your billing period"
+    detail = {
+        "cancelling": f"Cancelled -- you keep {plan} until <strong style='color:#FFFFFF;'>{until}</strong>. "
+                      f"You won't be charged again.",
+        "past_due":   "<strong style='color:#F0B429;'>Your last payment didn't go through.</strong> Stripe is "
+                      "retrying -- update your card under Manage subscription to keep access.",
+    }.get(status, f"Renews <strong style='color:#FFFFFF;'>{until}</strong>"
+                  f" &nbsp;·&nbsp; Card ending in <strong style='color:#FFFFFF;'>{user.get('card_last4') or '-'}</strong>")
     c1, c2 = st.columns([2, 1])
     with c1:
         st.markdown(f"""
         <div class="sig-card" style="border-left:4px solid {info.get('color','#007A8E')};">
             <div style="font-size:0.9rem;font-weight:700;color:#FFFFFF;margin-bottom:0.25rem;">{plan} Plan — ${info.get('price','?')}/mo</div>
             <div style="font-size:0.82rem;color:#8BA0B0;">{info.get('desc','')}</div>
-            <div style="margin-top:0.6rem;font-size:0.8rem;color:#8BA0B0;">
-                Next charge: <strong style="color:#FFFFFF;">{user.get('next_bill','-')}</strong>
-                &nbsp;·&nbsp; Card ending in <strong style="color:#FFFFFF;">{user.get('card_last4','-')}</strong>
-            </div>
+            <div style="margin-top:0.6rem;font-size:0.8rem;color:#8BA0B0;">{detail}</div>
         </div>
         """, unsafe_allow_html=True)
     with c2:
-        if st.button("Change Plan", use_container_width=True):
-            st.session_state.show_change_plan = True
-        if st.button("Cancel Subscription", use_container_width=True):
+        # Plan changes, card updates and invoices all go through Stripe's portal.
+        # This used to start a second checkout, which created a second
+        # subscription on top of the first -- billing the customer twice.
+        if user.get("stripe_customer_id") and billing_stripe.is_stripe_enabled():
+            if st.button("Manage subscription", use_container_width=True, type="primary"):
+                try:
+                    url = billing_stripe.create_portal_session(user["stripe_customer_id"])
+                    st.link_button("Open Stripe billing portal →", url, use_container_width=True)
+                    st.caption("Change plan, update your card, or see invoices.")
+                except Exception as e:
+                    st.error(f"Could not open the billing portal: {e}")
+        if status in ("active", "past_due") and st.button("Cancel Subscription", use_container_width=True):
             st.session_state.confirm_cancel = True
-
-    # Change plan
-    if st.session_state.get("show_change_plan"):
-        st.markdown('<div class="sec-header">Switch Plan</div>', unsafe_allow_html=True)
-        _payment_form(user, is_change=True)
 
     # Cancel confirmation
     if st.session_state.get("confirm_cancel"):
@@ -183,7 +207,7 @@ def _render_active_billing(user: dict):
                     # Don't mark it cancelled here if Stripe will keep billing.
                     st.session_state["_billing_error"] = f"{err} Your plan was not changed -- please contact support."
                 else:
-                    cancel_subscription(user["email"])
+                    cancel_subscription(user["email"], at_period_end=billing_stripe.is_stripe_enabled())
                     # Set before rerun: messages shown directly are wiped by the rerun.
                     st.session_state["_billing_info"] = "Subscription cancelled. Access continues until the billing period ends."
                 st.rerun()
@@ -193,7 +217,7 @@ def _render_active_billing(user: dict):
                 st.rerun()
 
 
-def _payment_form(user: dict, is_change: bool = False):
+def _payment_form(user: dict):
     """Real Stripe Checkout -- card entry happens on Stripe's own hosted
     page, never on this one, so no card data ever passes through this app."""
     if not billing_stripe.is_stripe_enabled():
@@ -212,16 +236,16 @@ def _payment_form(user: dict, is_change: bool = False):
         "Select plan",
         ["Starter — $19/mo", "Pro — $49/mo", "Business — $99/mo"],
         index=1,
-        key="plan_choice_change" if is_change else "plan_choice_new",
+        key="plan_choice_new",
     )
     plan_name = plan_choice.split(" —")[0]
     price     = PLANS[plan_name]["price"]
-    label     = "Continue to Stripe Checkout" if is_change else f"Continue to Stripe Checkout — ${price}/mo"
 
-    if st.button(label, use_container_width=True, type="primary",
-                 key="checkout_change" if is_change else "checkout_new"):
+    if st.button(f"Continue to Stripe Checkout — ${price}/mo", use_container_width=True,
+                 type="primary", key="checkout_new"):
         try:
-            url = billing_stripe.create_checkout_session(user["email"], plan_name)
+            url = billing_stripe.create_checkout_session(user["email"], plan_name,
+                                                         customer_id=user.get("stripe_customer_id"))
             st.link_button("Click to pay on Stripe →", url, use_container_width=True, type="primary")
             st.caption("Opens Stripe's secure hosted checkout in a new tab. Come back here after paying.")
         except Exception as e:

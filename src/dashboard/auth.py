@@ -154,9 +154,33 @@ def login_form():
         if not user["password_hash"].startswith("pbkdf2$"):
             user["password_hash"] = _hash(password)
             _save_users(users)
-        st.session_state.user = _build_session_user(email.lower().strip(), user)
+        key = email.lower().strip()
+        user = sync_billing(key) or user
+        st.session_state.user = _build_session_user(key, user)
         st.success(f"Welcome back, {user['name']}!")
         st.rerun()
+
+
+def sync_billing(email: str) -> dict | None:
+    """Refresh this account's plan from Stripe, the source of truth -- this is
+    how failed renewals, plan changes and cancellations made in Stripe's portal
+    reach the site (a Streamlit app can't receive Stripe's webhooks). Returns
+    the stored account, or None if unknown. Never blocks sign-in: if Stripe is
+    unreachable, the stored plan is kept."""
+    users = _load_users()
+    if email not in users:
+        return None
+    try:
+        import billing_stripe
+        fields = billing_stripe.sync_subscription(email) if billing_stripe.is_stripe_enabled() else None
+    except Exception:
+        fields = None
+    if fields and any(users[email].get(k) != v for k, v in fields.items()):
+        users[email].update(fields)
+        _save_users(users)
+        if (st.session_state.get("user") or {}).get("email") == email:
+            st.session_state.user = _build_session_user(email, users[email])
+    return users[email]
 
 
 def signup_form():
@@ -220,15 +244,23 @@ def update_plan(email: str, new_plan: str, card_last4: str = None,
         st.session_state.user = _build_session_user(email, users[email])
 
 
-def cancel_subscription(email: str):
+def cancel_subscription(email: str, at_period_end: bool = True):
+    """at_period_end=True (the Stripe case): Stripe keeps a cancelled
+    subscription running until the end of the month already paid for, so the
+    account keeps its plan until then; sync_billing() downgrades it once Stripe
+    actually ends it. Downgrading on the spot took away access people had paid
+    for. at_period_end=False ends access immediately (no Stripe billing)."""
     users = _load_users()
     if email not in users:
         return
-    users[email]["plan"]                    = "Trial"
-    users[email]["billing_status"]          = "cancelled"
-    users[email]["card_last4"]              = None
-    users[email]["next_bill"]               = None
-    users[email]["stripe_subscription_id"]  = None
+    if at_period_end:
+        users[email]["billing_status"] = "cancelling"
+    else:
+        users[email]["plan"]                    = "Trial"
+        users[email]["billing_status"]          = "cancelled"
+        users[email]["card_last4"]              = None
+        users[email]["next_bill"]               = None
+        users[email]["stripe_subscription_id"]  = None
     _save_users(users)
     st.session_state.user = _build_session_user(email, users[email])
 
