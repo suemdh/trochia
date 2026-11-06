@@ -15,7 +15,6 @@ Needs STRIPE_SECRET_KEY in .env (a test-mode "sk_test_..." key while
 developing). Everything here no-ops safely if that's not set --
 is_stripe_enabled() is checked by billing.py before any of this is called.
 """
-import json
 import os
 from datetime import datetime, timezone
 
@@ -39,7 +38,6 @@ def _setting(name: str, default: str | None = None) -> str | None:
 STRIPE_SECRET_KEY = _setting("STRIPE_SECRET_KEY")
 BASE_URL = _setting("APP_BASE_URL", "http://localhost:8501")
 
-PRICES_CACHE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "stripe_prices.json")
 
 PLANS = {
     "Starter":  19,
@@ -62,43 +60,33 @@ def is_live_mode() -> bool:
     return bool(STRIPE_SECRET_KEY) and STRIPE_SECRET_KEY.startswith(("sk_live_", "rk_live_"))
 
 
-def _load_price_cache() -> dict:
-    if os.path.exists(PRICES_CACHE):
-        with open(PRICES_CACHE) as f:
-            return json.load(f)
-    return {}
-
-
-def _save_price_cache(cache: dict):
-    os.makedirs(os.path.dirname(PRICES_CACHE), exist_ok=True)
-    with open(PRICES_CACHE, "w") as f:
-        json.dump(cache, f, indent=2)
+LOOKUP_KEYS = {plan: f"trochia_{plan.lower()}_monthly" for plan in PLANS}
+_price_ids: dict = {}  # per-process memo; Stripe itself is the store
 
 
 def ensure_price_ids() -> dict:
     """
-    Returns {plan_name: stripe_price_id}, creating the Product + recurring
-    Price on Stripe the first time each plan is needed and caching the IDs
-    locally so repeat runs reuse the same objects instead of littering the
-    Stripe dashboard with duplicates.
+    Returns {plan_name: stripe_price_id}. Prices are found on Stripe by a fixed
+    lookup key, and created (with that key) only if missing. Stripe is the only
+    store: these IDs used to be cached in a file, which held test-mode IDs that
+    don't exist in live mode, and the hosted site's disk is wiped on restart --
+    so a live key would have broken checkout or created duplicate products.
+    Works the same in test and live mode with nothing to migrate.
     """
-    cache = _load_price_cache()
-    changed = False
+    if len(_price_ids) == len(PLANS):
+        return dict(_price_ids)
+    found = {p.lookup_key: p.id for p in
+             stripe.Price.list(lookup_keys=list(LOOKUP_KEYS.values()), active=True, limit=10).data}
     for plan, amount in PLANS.items():
-        if plan in cache:
-            continue
-        product = stripe.Product.create(name=f"Trochiá {plan}")
-        price = stripe.Price.create(
-            product=product.id,
-            unit_amount=amount * 100,
-            currency="usd",
-            recurring={"interval": "month"},
-        )
-        cache[plan] = price.id
-        changed = True
-    if changed:
-        _save_price_cache(cache)
-    return cache
+        key = LOOKUP_KEYS[plan]
+        if key not in found:
+            product = stripe.Product.create(name=f"Trochiá {plan}")
+            found[key] = stripe.Price.create(
+                product=product.id, unit_amount=amount * 100, currency="usd",
+                recurring={"interval": "month"}, lookup_key=key,
+            ).id
+        _price_ids[plan] = found[key]
+    return dict(_price_ids)
 
 
 def create_checkout_session(email: str, plan_name: str, customer_id: str | None = None) -> str:
@@ -118,16 +106,21 @@ def create_checkout_session(email: str, plan_name: str, customer_id: str | None 
     return session.url
 
 
-PORTAL_CACHE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "stripe_portal.json")
+PORTAL_TAG = "trochia"
+_portal_id: list = []  # per-process memo
 
 
 def ensure_portal_configuration() -> str:
     """Stripe's hosted billing portal, configured once to allow switching
     between the three plans (Stripe's default portal can't switch plans).
-    Cached like the price IDs so it's created only once."""
-    if os.path.exists(PORTAL_CACHE):
-        with open(PORTAL_CACHE) as f:
-            return json.load(f)["configuration"]
+    Found on Stripe by a metadata tag, like the prices -- no local file, so it
+    works in live mode and survives the hosted site's disk being wiped."""
+    if _portal_id:
+        return _portal_id[0]
+    for cfg in stripe.billing_portal.Configuration.list(active=True, limit=50).data:
+        if getattr(cfg.metadata, "app", None) == PORTAL_TAG:
+            _portal_id.append(cfg.id)
+            return cfg.id
     prices = ensure_price_ids()
     products = [{"product": stripe.Price.retrieve(pid).product, "prices": [pid]} for pid in prices.values()]
     cfg = stripe.billing_portal.Configuration.create(
@@ -139,10 +132,9 @@ def ensure_portal_configuration() -> str:
             "subscription_update": {"enabled": True, "default_allowed_updates": ["price"],
                                     "proration_behavior": "create_prorations", "products": products},
         },
+        metadata={"app": PORTAL_TAG},
     )
-    os.makedirs(os.path.dirname(PORTAL_CACHE), exist_ok=True)
-    with open(PORTAL_CACHE, "w") as f:
-        json.dump({"configuration": cfg.id}, f, indent=2)
+    _portal_id.append(cfg.id)
     return cfg.id
 
 
@@ -181,7 +173,7 @@ def sync_subscription(email: str) -> dict | None:
     sub = live[0]
     item = sub["items"].data[0]  # sub.items would hit the dict-method name
     end = getattr(sub, "current_period_end", None) or getattr(item, "current_period_end", None)
-    plan = {pid: name for name, pid in _load_price_cache().items()}.get(item.price.id)
+    plan = {pid: name for name, pid in ensure_price_ids().items()}.get(item.price.id)
     fields = {
         "billing_status": ("past_due" if sub.status == "past_due"
                            else "cancelling" if sub.cancel_at_period_end else "active"),

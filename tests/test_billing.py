@@ -27,6 +27,7 @@ auth.USERS_FILE = TMP
 _real_retrieve = billing_stripe.retrieve_paid_session
 _real_cancel = billing_stripe.cancel_stripe_subscription
 _real_sync = billing_stripe.sync_subscription
+_real_ensure_prices = billing_stripe.ensure_price_ids
 # Deterministic, and never a real Stripe call: the Billing page syncs with
 # Stripe on every view, so that's replaced unless a test sets it.
 billing_stripe.STRIPE_SECRET_KEY = "rk_test_fake"
@@ -146,7 +147,7 @@ PRO = "price_pro_test"
 
 
 def _stripe_has(subs, customers=("cus_1",)):
-    billing_stripe._load_price_cache = lambda: {"Starter": "price_s", "Pro": PRO, "Business": "price_b"}
+    billing_stripe.ensure_price_ids = lambda: {"Starter": "price_s", "Pro": PRO, "Business": "price_b"}
     stripe.Customer.list = lambda **k: _obj({"data": [{"id": c} for c in customers]})
     stripe.Subscription.list = lambda **k: _obj({"data": subs})
 
@@ -227,6 +228,24 @@ def test_subscriber_gets_portal_not_a_second_checkout():
                               stripe_subscription_id="sub_1")
     assert "Manage subscription" in labels and "Cancel Subscription" in labels
     assert not any("Checkout" in l for l in labels), "subscriber offered a second checkout (double billing)"
+
+
+def test_prices_found_by_lookup_key_and_created_once_in_a_new_account():
+    # A fresh (e.g. live-mode) Stripe account has none of our prices: they must
+    # be created with lookup keys, and found -- not duplicated -- next time.
+    created = []
+    stripe.Price.list = lambda **k: _obj({"data": [{"id": pid, "lookup_key": lk} for lk, pid in created]})
+    stripe.Product.create = lambda **k: _obj({"id": "prod_new"})
+    def make_price(**k):
+        created.append((k["lookup_key"], f"price_{len(created)}"))
+        return _obj({"id": created[-1][1]})
+    stripe.Price.create = make_price
+    billing_stripe._price_ids.clear()
+    first = _real_ensure_prices()
+    assert sorted(lk for lk, _ in created) == sorted(billing_stripe.LOOKUP_KEYS.values())
+    billing_stripe._price_ids.clear()  # e.g. after the hosted site restarts
+    assert _real_ensure_prices() == first and len(created) == 3, "prices duplicated on restart"
+    billing_stripe._price_ids.clear()
 
 
 def _trial_billing_page(key):
