@@ -61,6 +61,9 @@ def is_live_mode() -> bool:
 
 
 LOOKUP_KEYS = {plan: f"trochia_{plan.lower()}_monthly" for plan in PLANS}
+# Stripe's "Software as a service (SaaS) - business use" category. Required for
+# checkout when the account uses Managed Payments or Stripe Tax.
+SAAS_TAX_CODE = "txcd_10103001"
 _price_ids: dict = {}  # per-process memo; Stripe itself is the store
 
 
@@ -75,12 +78,18 @@ def ensure_price_ids() -> dict:
     """
     if len(_price_ids) == len(PLANS):
         return dict(_price_ids)
-    found = {p.lookup_key: p.id for p in
-             stripe.Price.list(lookup_keys=list(LOOKUP_KEYS.values()), active=True, limit=10).data}
+    listed = stripe.Price.list(lookup_keys=list(LOOKUP_KEYS.values()), active=True,
+                               limit=10, expand=["data.product"]).data
+    found = {p.lookup_key: p.id for p in listed}
+    for p in listed:
+        # Products made before tax codes were set get one now -- Stripe requires it
+        # when the account uses Managed Payments or Stripe Tax.
+        if not getattr(p.product, "tax_code", None):
+            stripe.Product.modify(p.product.id, tax_code=SAAS_TAX_CODE)
     for plan, amount in PLANS.items():
         key = LOOKUP_KEYS[plan]
         if key not in found:
-            product = stripe.Product.create(name=f"Trochiá {plan}")
+            product = stripe.Product.create(name=f"Trochiá {plan}", tax_code=SAAS_TAX_CODE)
             found[key] = stripe.Price.create(
                 product=product.id, unit_amount=amount * 100, currency="usd",
                 recurring={"interval": "month"}, lookup_key=key,

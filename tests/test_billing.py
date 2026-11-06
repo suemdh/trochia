@@ -258,9 +258,15 @@ def test_subscriber_gets_portal_not_a_second_checkout():
 def test_prices_found_by_lookup_key_and_created_once_in_a_new_account():
     # A fresh (e.g. live-mode) Stripe account has none of our prices: they must
     # be created with lookup keys, and found -- not duplicated -- next time.
-    created = []
-    stripe.Price.list = lambda **k: _obj({"data": [{"id": pid, "lookup_key": lk} for lk, pid in created]})
-    stripe.Product.create = lambda **k: _obj({"id": "prod_new"})
+    created, product_tax_codes, modified = [], [], []
+    stripe.Price.list = lambda **k: _obj({"data": [
+        {"id": pid, "lookup_key": lk, "product": {"id": f"prod_{lk}", "tax_code": billing_stripe.SAAS_TAX_CODE}}
+        for lk, pid in created]})
+    def make_product(**k):
+        product_tax_codes.append(k.get("tax_code"))
+        return _obj({"id": "prod_new"})
+    stripe.Product.create = make_product
+    stripe.Product.modify = lambda pid, **k: modified.append(pid)
     def make_price(**k):
         created.append((k["lookup_key"], f"price_{len(created)}"))
         return _obj({"id": created[-1][1]})
@@ -268,9 +274,23 @@ def test_prices_found_by_lookup_key_and_created_once_in_a_new_account():
     billing_stripe._price_ids.clear()
     first = _real_ensure_prices()
     assert sorted(lk for lk, _ in created) == sorted(billing_stripe.LOOKUP_KEYS.values())
+    assert product_tax_codes == [billing_stripe.SAAS_TAX_CODE] * 3, "new products missing tax code"
     billing_stripe._price_ids.clear()  # e.g. after the hosted site restarts
     assert _real_ensure_prices() == first and len(created) == 3, "prices duplicated on restart"
+    assert modified == [], "re-tagged products that already had a tax code"
     billing_stripe._price_ids.clear()
+
+
+def test_existing_products_without_tax_code_get_one():
+    modified = []
+    stripe.Price.list = lambda **k: _obj({"data": [
+        {"id": f"price_{i}", "lookup_key": lk, "product": {"id": f"prod_{i}"}}
+        for i, lk in enumerate(billing_stripe.LOOKUP_KEYS.values())]})
+    stripe.Product.modify = lambda pid, **k: modified.append((pid, k.get("tax_code")))
+    billing_stripe._price_ids.clear()
+    _real_ensure_prices()
+    billing_stripe._price_ids.clear()
+    assert len(modified) == 3 and all(tc == billing_stripe.SAAS_TAX_CODE for _, tc in modified), modified
 
 
 def _trial_billing_page(key):
