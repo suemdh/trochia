@@ -2,6 +2,7 @@
 import os
 import streamlit as st
 from decision.engine import SIGNAL_LABEL
+from commodity_maps import TOTAL_COMMODITIES
 
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets")
 
@@ -60,7 +61,7 @@ def render(commodities: dict):
 
     _, c, _ = st.columns([1,1,1])
     with c:
-        if st.button(f"See All {len(commodities)} Commodities", use_container_width=True):
+        if st.button(f"See All {TOTAL_COMMODITIES} Commodities", use_container_width=True):
             st.session_state.page = "Market"; st.rerun()
 
     st.markdown('<hr class="dark-divider">', unsafe_allow_html=True)
@@ -71,7 +72,7 @@ def render(commodities: dict):
     f1, f2, f3 = st.columns(3)
     for col, title, desc, border in [
         (f1, "Clear signals",
-         f"Each of {len(commodities)} items gets one simple call: Buy ahead, Watch, or No action "
+         f"Each of {TOTAL_COMMODITIES} items gets one simple call: Buy ahead, Watch, or No action "
          f"needed -- so you know at a glance what to do.",
          "#FF4B4B"),
         (f2, "Price forecasts",

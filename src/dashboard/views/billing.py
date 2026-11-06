@@ -133,10 +133,11 @@ def _render_trial_upsell(user: dict):
     st.markdown(f"""
     <div class="sig-card sig-card-yellow" style="margin-bottom:1.5rem;">
         <div style="font-size:0.95rem;font-weight:700;color:#FFFFFF;margin-bottom:0.4rem;">
-            Free Trial — {days} days remaining
+            {f"Free Trial — {days} days remaining" if days else "Your free trial has ended"}
         </div>
         <div style="font-size:0.82rem;color:#8BA0B0;margin-bottom:0.75rem;">
-            Your trial gives you full access to every commodity and feature.
+            {"Your trial gives you full access to every commodity and feature." if days else
+             "Choose a plan below to see every commodity again. Your account and saved picks are kept."}
         </div>
         <div style="background:#1E3A5F;border-radius:4px;height:8px;width:100%;">
             <div style="background:{bar_color};border-radius:4px;height:8px;width:{pct}%;"></div>

@@ -21,7 +21,7 @@ for _p in [_DASH, _SRC, _ROOT]:
         sys.path.insert(0, _p)
 
 from styles import DARK_CSS
-from auth import get_current_user, logout, PLAN_COMMODITY_LIMIT
+from auth import get_current_user, logout, PLAN_COMMODITY_LIMIT, PREVIEW_COUNT, has_full_access
 from views import home, market, billing, chat
 from views import commodities as commodities_view
 from views import help_page, pricing, account, legal
@@ -211,6 +211,8 @@ def build_commodities():
             result = {k: v for k, v in result.items() if k in prefs}
         result = dict(sorted(result.items(),
                              key=lambda x: ({"RED":0,"YELLOW":1,"GREEN":2}.get(x[1]["signal"],3), -abs(x[1]["pct"]))))
+        if not has_full_access(user):
+            result = dict(list(result.items())[:PREVIEW_COUNT])  # the most urgent few, as a preview
         return result, True
 
     # No forecasts on disk: say so. This used to fall back to a hardcoded
@@ -327,6 +329,18 @@ def main():
     page, refresh_secs = render_sidebar(is_live)
 
     user = get_current_user()
+    if commodities and not has_full_access(user) and page in ("Market", "Commodities"):
+        if user:
+            st.warning(f"Your free trial has ended. Choose a plan to see all {TOTAL_COMMODITIES} commodities "
+                       f"-- your account and saved picks are kept.")
+            if st.button("Choose a plan", type="primary"):
+                st.session_state.page = "Billing"; st.rerun()
+        else:
+            st.info(f"You're seeing a preview: {len(commodities)} of {TOTAL_COMMODITIES} commodities. "
+                    f"Start a free 14-day trial to see them all -- no credit card needed.")
+            if st.button("Start free trial", type="primary"):
+                st.session_state.page = "Profile"; st.rerun()
+
     plan_limit = PLAN_COMMODITY_LIMIT.get((user or {}).get("plan"))
     if plan_limit and not (user or {}).get("commodity_prefs") and page in ("Home", "Market", "Commodities"):
         st.info(f"Your {user['plan']} plan includes up to {plan_limit} commodities. "

@@ -15,6 +15,23 @@ USERS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "users.
 TRIAL_DAYS = 14
 # How many commodities a plan includes; plans not listed see every commodity.
 PLAN_COMMODITY_LIMIT = {"Starter": 5}
+# Visitors who aren't signed in, and trials that have ended, see this many.
+PREVIEW_COUNT = 3
+
+
+def has_full_access(user: dict | None) -> bool:
+    """Full data, or the preview (PREVIEW_COUNT commodities) for visitors who
+    aren't signed in and for trials that have ended. Only enforced once live
+    payments are on: until then there's no way to subscribe, so nobody is
+    limited while plans say "coming soon"."""
+    import billing_stripe
+    if not billing_stripe.is_live_mode():
+        return True
+    if not user:
+        return False
+    if user.get("plan", "Trial") != "Trial":
+        return True
+    return (user.get("trial_days_left") or 0) > 0
 TERMS_VERSION = "2026-11-06"  # bump when the Terms/Privacy text in views/legal.py changes
 PBKDF2_ITERATIONS = 600_000  # OWASP's current recommendation for PBKDF2-SHA256
 

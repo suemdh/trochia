@@ -193,6 +193,44 @@ def test_profile_handles_downgrade_with_too_many_picks():
     assert not at.exception, at.exception
 
 
+def _market(key, user=None):
+    import billing_stripe
+    billing_stripe.STRIPE_SECRET_KEY = key
+    try:
+        at = AppTest.from_file(APP, default_timeout=120)
+        at.session_state["page"] = "Market"
+        if user:
+            at.session_state["user"] = {"email": "t@test.com", "name": "T", "joined": "2026-11-01",
+                                        "commodity_prefs": [], **user}
+        at.run()
+        assert not at.exception, at.exception
+        return at
+    finally:
+        billing_stripe.STRIPE_SECRET_KEY = None
+
+
+def test_no_limits_while_payments_are_not_live():
+    at = _market("rk_test_fake")
+    assert len(at.expander) > auth.PREVIEW_COUNT, "visitors limited before payments are live"
+
+
+def test_live_signed_out_visitors_get_a_preview():
+    at = _market("rk_live_fake")
+    assert len(at.expander) == auth.PREVIEW_COUNT
+    assert any("preview" in i.value for i in at.info)
+
+
+def test_live_active_trial_and_paid_see_everything():
+    assert len(_market("rk_live_fake", {"plan": "Trial", "trial_days_left": 5}).expander) > auth.PREVIEW_COUNT
+    assert len(_market("rk_live_fake", {"plan": "Pro", "trial_days_left": None}).expander) > auth.PREVIEW_COUNT
+
+
+def test_live_ended_trial_back_to_preview():
+    at = _market("rk_live_fake", {"plan": "Trial", "trial_days_left": 0})
+    assert len(at.expander) == auth.PREVIEW_COUNT
+    assert any("trial has ended" in w.value for w in at.warning)
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in list(globals().items()) if n.startswith("test_")]
     failed = 0
