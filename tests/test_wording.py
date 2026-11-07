@@ -26,6 +26,11 @@ def test_market_cards_use_plain_signal_names():
     for t in titles:
         assert not any(f"· {code}" in t for code in RAW_CODES), f"raw signal code shown: {t}"
         assert any(label in t for label in SIGNAL_LABEL.values()), f"no plain signal name: {t}"
+    captions = [c.value for c in at.caption]
+    assert any("average · the latest the U.S. government has published" in c for c in captions), \
+        "monthly government prices (e.g. Eggs) should say which month's average they are"
+    assert not any("as of 20" in c and "-01" in c and "government" in c for c in captions
+                   if "Diesel" not in c), [c for c in captions if "government" in c]
 
 
 def test_pricing_only_claims_what_exists():

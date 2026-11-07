@@ -2,7 +2,10 @@
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timezone
-from commodity_maps import strip_unit
+from commodity_maps import strip_unit, FRED_COMMODITY_MAP
+
+# BLS average-price series are monthly; Diesel and Gasoline are weekly EIA series.
+MONTHLY_GOV = set(FRED_COMMODITY_MAP) - {"Diesel / Freight", "Gasoline"}
 from decision.engine import SIGNAL_LABEL
 
 SIG_COLOR = {"RED":"#FF4B4B","YELLOW":"#F0B429","GREEN":"#21C55D"}
@@ -135,7 +138,14 @@ def render(commodities: dict, search_query: str = ""):
                 ticker_note = f"Price from the {r['_contract']} futures contract"
             else:
                 ticker_note = "Price from U.S. government data (FRED / USDA)"
-            st.caption(f"{ticker_note}  ·  as of {r['_price_as_of'] or 'unknown'}")
+            as_of = r["_price_as_of"]
+            if r["Commodity"] in MONTHLY_GOV and as_of[:7].count("-") == 1:
+                # BLS monthly averages are dated the 1st ("2026-09-01" = the September
+                # average), which read like a two-month-old daily price.
+                month = datetime.strptime(as_of[:7], "%Y-%m").strftime("%B %Y")
+                st.caption(f"{month} average · the latest the U.S. government has published (updated monthly)")
+            else:
+                st.caption(f"{ticker_note}  ·  as of {as_of or 'unknown'}")
 
             if r["_price_rejected"]:
                 st.markdown("""
