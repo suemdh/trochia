@@ -23,3 +23,9 @@ services:
         sync: false
       - key: SMTP_PASSWORD
         sync: false
+      - key: SMTP_HOST           # Brevo relay
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_FROM
+        value: trochia.connect@gmail.com
