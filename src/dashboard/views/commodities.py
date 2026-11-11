@@ -11,7 +11,7 @@ sys.path.insert(0, _ROOT)
 sys.path.insert(0, os.path.join(_ROOT, "src"))
 
 from commodity_maps import (
-    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP, yfinance_safe_name, strip_unit,
+    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, strip_unit,
 )
 from decision.engine import SIGNAL_LABEL
 
@@ -28,8 +28,6 @@ for _name, (_col, _unit) in FRED_COMMODITY_MAP.items():
     RAW_FILE_MAP[_name] = ("fred_data.csv", _col, 1.0)
 for _name, (_key, _unit) in USDA_COMMODITY_MAP.items():
     RAW_FILE_MAP[_name] = (f"usda_{_key}.csv", "value", 1.0)
-for _name in YFINANCE_COMMODITY_MAP:
-    RAW_FILE_MAP[_name] = (f"yfinance_{yfinance_safe_name(_name)}.csv", "value", 1.0)
 
 SIG_COLOR = {"RED":"rgba(255,75,75,1)","YELLOW":"rgba(240,180,41,1)","GREEN":"rgba(33,197,93,1)"}
 SIG_BAND  = {"RED":"rgba(255,75,75,0.12)","YELLOW":"rgba(240,180,41,0.12)","GREEN":"rgba(33,197,93,0.12)"}
@@ -129,7 +127,7 @@ def render(commodities: dict):
                 "today's price and the forecast only.")
 
     horizon   = v.get("horizon", 8)
-    step_days = int(v.get("step_days", 7))   # a step is a month for FRED, a week for yfinance
+    step_days = int(v.get("step_days", 7))   # a step is the source's own interval: a month, week or day
     last      = pd.to_datetime(hx[-1])
     fx        = [(last + timedelta(days=step_days * (i+1))).strftime("%Y-%m-%d") for i in range(horizon)]
     fy      = list(np.linspace(hy[-1], v["forecast"], horizon))

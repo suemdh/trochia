@@ -269,7 +269,7 @@ def _render_plan_compare(user: dict):
     rows = [
         ("Commodities tracked",       "Up to 5", f"All {TOTAL_COMMODITIES}", f"All {TOTAL_COMMODITIES}"),
         ("Forecast updates",          "Weekly",  "Weekly",  "Weekly"),
-        ("Live market prices",        "Yes",     "Yes",     "Yes"),
+        ("Government price data, weekly", "Yes",  "Yes",     "Yes"),
         ("Price history charts",      "Yes",     "Full",    "Full"),
         ("Savings calculator",        "Yes",     "Yes",     "Yes"),
         ("Email alerts",              "Coming soon", "Coming soon", "Coming soon"),

@@ -23,8 +23,6 @@ data/processed/
 
 # Short-lived caches. Committed copies look freshly written after a checkout,
 # so a cloud run or a fresh deploy would serve stale "live" prices from them.
-data/raw/yfinance_live.json
-data/raw/yfinance_contracts.json
 data/raw/av_*.json
 
 # Runtime logs (regenerated; may be large)

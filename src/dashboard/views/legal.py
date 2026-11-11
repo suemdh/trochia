@@ -7,7 +7,7 @@ auth.TERMS_VERSION so new sign-ups record which version they agreed to.
 import streamlit as st
 
 CONTACT = "trochia.connect@gmail.com"
-UPDATED = "November 6, 2026"
+UPDATED = "November 11, 2026"
 
 TERMS = f"""
 *Last updated: {UPDATED}*
@@ -26,9 +26,9 @@ Trochia shows commodity prices and statistical forecasts of where they may go. P
 understand what they are:
 - **Forecasts are estimates and can be wrong.** They are built from historical price
   patterns and cannot anticipate breaking news, weather, wars, or supply shocks.
-- **Prices shown may not be your prices.** Futures and national-average retail prices
+- **Prices shown may not be your prices.** Wholesale, cash and national-average retail prices
   differ from what your supplier charges, which includes local basis, freight, and markup.
-- **Data comes from third parties** (including FRED/BLS, USDA, Yahoo Finance, and Alpha
+- **Data comes from third parties** (including FRED/BLS, EIA, USDA, and Alpha
   Vantage) and may be delayed, incomplete, or occasionally wrong.
 
 Nothing on Trochia is financial, investment, legal, or purchasing advice. You are solely

@@ -32,7 +32,7 @@ def render(commodities: dict):
             st.session_state.page = "Profile"; st.rerun()
 
     # ── Live snapshot ──────────────────────────────────────────────────────────
-    st.markdown('<div class="sec-header">Live Market Snapshot</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Market Snapshot</div>', unsafe_allow_html=True)
 
     sig_order = {"RED":0,"YELLOW":1,"GREEN":2}
     top3 = sorted(commodities.items(), key=lambda x: (sig_order.get(x[1]["signal"],3), -abs(x[1]["pct"])))[:3]
@@ -95,6 +95,6 @@ def render(commodities: dict):
     st.markdown("""
     <div class="trochia-footer">
         TROCHIÁ &nbsp;|&nbsp; Commodity Intelligence Platform<br>
-        Data: FRED / BLS &nbsp;·&nbsp; USDA AMS &nbsp;·&nbsp; Yahoo Finance
+        Data: FRED (BLS, EIA) &nbsp;·&nbsp; USDA
     </div>
     """, unsafe_allow_html=True)

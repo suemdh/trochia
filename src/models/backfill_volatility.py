@@ -22,34 +22,31 @@ ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from models.train_pipeline import compute_volatility_flag, apply_sector_flags, HORIZON, OUTPUTS_PATH
+from models.train_pipeline import compute_volatility_flag, apply_sector_flags, to_weekly, HORIZON, OUTPUTS_PATH
 from commodity_maps import (
-    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP, yfinance_safe_name,
+    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP,
 )
 
 FRED_PATH = os.path.join(ROOT, "data", "raw", "fred_data.csv")
 USDA_DIR  = os.path.join(ROOT, "data", "raw")
-YF_DIR    = os.path.join(ROOT, "data", "raw")
+
+
+def load_series(name: str) -> pd.DataFrame:
+    """[date, value] price history for one commodity, oldest first, from the
+    same raw files train_pipeline.py trains on."""
+    if name in FRED_COMMODITY_MAP:
+        col, _ = FRED_COMMODITY_MAP[name]
+        df = pd.read_csv(FRED_PATH, parse_dates=["date"])[["date", col]].rename(columns={col: "value"})
+    elif name in USDA_COMMODITY_MAP:
+        key, _ = USDA_COMMODITY_MAP[name]
+        df = pd.read_csv(os.path.join(USDA_DIR, f"usda_{key}.csv"), parse_dates=["date"])
+    else:
+        raise KeyError(f"{name} not found in any commodity map")
+    return to_weekly(df)  # same weekly view the forecasts were trained on
 
 
 def load_prices(name: str):
-    if name in FRED_COMMODITY_MAP:
-        col, _ = FRED_COMMODITY_MAP[name]
-        df = pd.read_csv(FRED_PATH, parse_dates=["date"]).sort_values("date")
-        return df[col].dropna().values
-    if name in USDA_COMMODITY_MAP:
-        key, _ = USDA_COMMODITY_MAP[name]
-        path = os.path.join(USDA_DIR, f"usda_{key}.csv")
-        df = pd.read_csv(path, parse_dates=["date"]).sort_values("date")
-        return df["value"].dropna().values
-    if name in YFINANCE_COMMODITY_MAP:
-        safe = yfinance_safe_name(name)
-        path = os.path.join(YF_DIR, f"yfinance_{safe}.csv")
-        df = pd.read_csv(path, parse_dates=["date"])
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-        df = df.sort_values("date").dropna(subset=["value"])
-        return df["value"].values
-    raise KeyError(f"{name} not found in any commodity map")
+    return load_series(name)["value"].values
 
 
 def run():

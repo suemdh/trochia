@@ -32,7 +32,7 @@ def has_full_access(user: dict | None) -> bool:
     if user.get("plan", "Trial") != "Trial":
         return True
     return (user.get("trial_days_left") or 0) > 0
-TERMS_VERSION = "2026-11-06"  # bump when the Terms/Privacy text in views/legal.py changes
+TERMS_VERSION = "2026-11-11"  # bump when the Terms/Privacy text in views/legal.py changes
 PBKDF2_ITERATIONS = 600_000  # OWASP's current recommendation for PBKDF2-SHA256
 
 

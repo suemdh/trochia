@@ -31,7 +31,7 @@ from models.naive_baseline import evaluate_on_holdout as naive_holdout, rolling_
 from decision.engine import ForecastInput, evaluate
 from data.lag_compensator import estimate_today
 from commodity_maps import (
-    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP, yfinance_safe_name,
+    FRED_COMMODITY_MAP, USDA_COMMODITY_MAP,
 )
 
 FEATURES_PATH  = os.path.join(ROOT, "data", "processed", "features.csv")
@@ -41,7 +41,7 @@ OUTPUTS_PATH   = os.path.join(ROOT, "outputs",           "forecasts.csv")
 HISTORY_PATH   = os.path.join(ROOT, "outputs",           "forecast_history.csv")
 MODELS_DIR     = os.path.join(ROOT, "data",              "models")
 HORIZON        = 8      # steps ahead -- one step = the source's own sampling
-                        # interval (FRED/AlphaVantage are monthly, yfinance weekly),
+                        # interval (monthly, weekly or daily depending on the series),
                         # so call infer_step_unit() to label it correctly.
 HOLDOUT_WEEKS  = 26     # steps held back for RMSE evaluation
 SARIMA_FIT_TIMEOUT_SEC = 90  # see fit_with_timeout()
@@ -101,6 +101,16 @@ def infer_step_unit(dates) -> tuple[str, int]:
     if med <= 45:
         return ("months", 30)
     return ("quarters", 91)
+
+
+def to_weekly(df: pd.DataFrame, col: str = "value") -> pd.DataFrame:
+    """Daily series -> the last real observation of each week (its real date
+    kept, so "as of" never shows a future Friday). Daily EIA/USDA prices would
+    otherwise make an 8-step forecast mean 8 *days* -- too short to act on."""
+    df = df.dropna(subset=[col]).sort_values("date")
+    if infer_step_unit(df["date"])[0] != "days":
+        return df.reset_index(drop=True)
+    return df.groupby(df["date"].dt.to_period("W-FRI")).last().reset_index(drop=True)
 
 
 N_BACKTEST_WINDOWS = 3
@@ -208,7 +218,7 @@ def compute_volatility_flag(prices: np.ndarray, window: int,
 # more informative signal than any one of them moving alone.
 ENERGY_GROUP = [
     "Crude Oil (Brent)", "Crude Oil (WTI)", "Natural Gas",
-    "Gasoline", "Gasoline (RBOB)", "Heating Oil", "Diesel / Freight",
+    "Gasoline", "Gasoline (Wholesale)", "Heating Oil", "Diesel / Freight",
 ]
 SECTOR_Z_THRESHOLD = 0.5  # median signed z-score across the group to trigger
 
@@ -292,7 +302,7 @@ def build_lstm_features(prices: np.ndarray, step_days: int, dates=None,
 
     return feats.dropna().values
 
-# FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, and YFINANCE_COMMODITY_MAP now live in
+# FRED_COMMODITY_MAP and USDA_COMMODITY_MAP live in
 # commodity_maps.py, shared with the dashboard so chart data can't drift out of
 # sync with what's actually being forecast (see that module's docstring).
 
@@ -334,8 +344,7 @@ def train_fred_commodity(
         print(f"  [{name}] Column '{col}' not in {source} data — skipping")
         return None
 
-    series = fred_df[["date", col]].dropna(subset=[col]).copy()
-    series = series.sort_values("date").reset_index(drop=True)
+    series = to_weekly(fred_df[["date", col]].copy(), col)
 
     if len(series) < HOLDOUT_WEEKS + 20:
         print(f"  [{name}] Not enough data ({len(series)} rows) — skipping")
@@ -355,7 +364,10 @@ def train_fred_commodity(
               f"({lag_info['lag_weeks']:.0f} weeks ago) — too stale to estimate a "
               f"current price or issue a signal. Skipping.")
         return None
-    current_price = lag_info["estimated_price"] or float(prices[-1])
+    # The latest OFFICIAL price, never a trend-projected guess: a projection
+    # made our "today" price disagree with USDA/EIA/BLS's own published number
+    # (Brent: $103.37 shown vs EIA's $107.03), and businesses check those.
+    current_price = float(prices[-1])
 
     # Train/test split (for the real forward-forecasting fits, below)
     train_series = series[col].iloc[:-HOLDOUT_WEEKS]
@@ -523,215 +535,11 @@ def train_fred_commodity(
         "naive_rmse":     round(naive_rmse, 4) if not np.isnan(naive_rmse) else None,
         "naive_dir_acc":  round(naive_dir, 4) if not np.isnan(naive_dir) else None,
         "beat_naive":     beat_naive,
-        "is_estimated":   lag_info["is_estimated"],
+        "is_estimated":   False,  # official published price; "as of" shows its date
         "price_as_of":    lag_info.get("last_known_date", ""),
         "lag_weeks":      lag_info.get("lag_weeks", 0),
         "source":         source,
         "rmse_pct":       round(rmse_pct, 6) if np.isfinite(rmse_pct) else None,
-        "volatility_flag":   vol["volatility_flag"],
-        "volatility_zscore": vol["volatility_zscore"],
-        "recent_move_pct":   vol["recent_move_pct"],
-    }
-
-
-def train_yfinance_commodity(name: str, ticker: str, unit: str) -> dict | None:
-    """Build a forecast row for a yfinance-sourced commodity using historical weekly data."""
-    import os
-    safe = yfinance_safe_name(name)
-    hist_path = os.path.join(ROOT, "data", "raw", f"yfinance_{safe}.csv")
-
-    # Try to load history
-    if not os.path.exists(hist_path):
-        print(f"  [{name}] No history file at {hist_path} — fetching now")
-        try:
-            from data.fetch_yfinance import fetch_history, TICKERS
-            df_hist = fetch_history(ticker)
-            if df_hist.empty:
-                return None
-            os.makedirs(os.path.dirname(hist_path), exist_ok=True)
-            df_hist.to_csv(hist_path, index=False)
-        except Exception as e:
-            print(f"  [{name}] Could not fetch history: {e}")
-            return None
-
-    try:
-        df = pd.read_csv(hist_path, parse_dates=["date"])
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-        df = df.sort_values("date").dropna(subset=["value"])
-    except Exception as e:
-        print(f"  [{name}] Could not read history: {e}")
-        return None
-
-    if len(df) < 20:
-        print(f"  [{name}] Not enough history — skipping")
-        return None
-
-    # Try to get live current price
-    try:
-        from data.fetch_yfinance import fetch_live_prices
-        live = fetch_live_prices()
-        if name in live:
-            current_price = live[name]["price"]
-            is_live = True
-        else:
-            current_price = float(df["value"].iloc[-1])
-            is_live = False
-    except Exception:
-        current_price = float(df["value"].iloc[-1])
-        is_live = False
-
-    prices     = df["value"].values
-    price_mean = prices.mean()
-    price_std  = prices.std() + 1e-9
-    normed     = ((prices - price_mean) / price_std).reshape(-1, 1)
-
-    # yfinance history is weekly, but confirm rather than assume
-    horizon_unit, step_days = infer_step_unit(df["date"])
-
-    # Walk-forward windows -- same rolling-backtest protocol as the FRED path,
-    # shared by all three models. holdout_n mirrors the FRED path's HOLDOUT_WEEKS
-    # but capped for shorter yfinance histories.
-    holdout_n = min(HOLDOUT_WEEKS, len(prices) // 4)
-    window    = 12
-    windows   = backtest_windows(len(prices), holdout_n, HORIZON)
-
-    # ── Baseline: linear trend fitted on train only ───────────────
-    try:
-        from sklearn.linear_model import LinearRegression
-        bl_rmses = []
-        for train_end, test_end in windows:
-            tr_idx = np.arange(train_end).reshape(-1, 1)
-            bl_w = LinearRegression().fit(tr_idx, prices[:train_end])
-            te_idx = np.arange(train_end, test_end).reshape(-1, 1)
-            bl_rmses.append(rmse(prices[train_end:test_end], bl_w.predict(te_idx)))
-        bl_rmse = float(np.mean(bl_rmses))
-
-        full_idx = np.arange(len(prices)).reshape(-1, 1)
-        bl_full  = LinearRegression().fit(full_idx, prices)
-        fc_idx   = np.arange(len(prices), len(prices) + HORIZON).reshape(-1, 1)
-        baseline_fc = bl_full.predict(fc_idx)
-        print(f"  [{name}] Baseline RMSE={bl_rmse:.4f} (avg of {len(windows)} windows)")
-    except Exception as e:
-        print(f"  [{name}] Baseline failed: {e}")
-        baseline_fc = np.full(HORIZON, current_price)
-        bl_rmse     = float("inf")
-
-    # ── SARIMA: fit 1 scores (walk-forward), fit 2 forecasts ──────
-    m = seasonal_period(horizon_unit)
-    try:
-        s_rmses = []
-        for train_end, test_end in windows:
-            sarima_w = SarimaModel(order=(1,1,1), seasonal_order=(1,1,1,m))
-            fit_with_timeout(sarima_w.fit, pd.Series(prices[:train_end]))
-            s_holdout = sarima_w.forecast_mean(steps=HORIZON)[:test_end - train_end]
-            s_rmses.append(rmse(prices[train_end:test_end], s_holdout))
-        s_rmse = float(np.mean(s_rmses))
-
-        sarima = SarimaModel(order=(1,1,1), seasonal_order=(1,1,1,m))
-        fit_with_timeout(sarima.auto_fit, df["value"], commodity=name, m=m)
-        sarima_fc = sarima.forecast_mean(steps=HORIZON)
-        print(f"  [{name}] SARIMA RMSE={s_rmse:.4f} (avg of {len(windows)} windows)")
-    except Exception as e:
-        print(f"  [{name}] SARIMA failed: {e}")
-        sarima_fc = np.full(HORIZON, current_price)
-        s_rmse = float("inf")
-
-    # ── LSTM: scaled on train stats, scored out-of-sample, walk-forward ──
-    try:
-        l_rmses = []
-        for train_end, test_end in windows:
-            train_vals_w = prices[:train_end]
-            if len(train_vals_w) <= window:
-                continue
-            tr_mean = train_vals_w.mean()
-            tr_std  = train_vals_w.std() + 1e-9
-            tr_normed = ((train_vals_w - tr_mean) / tr_std).reshape(-1, 1)
-            eval_model = train_lstm(tr_normed, commodity=f"{name}__eval",
-                                    force_retrain=True, epochs=40)
-            l_holdout = lstm_forecast(eval_model, tr_normed[-window:]) * tr_std + tr_mean
-            steps = test_end - train_end
-            l_rmses.append(rmse(prices[train_end:test_end], l_holdout[:steps]))
-        l_rmse = float(np.mean(l_rmses)) if l_rmses else float("inf")
-
-        lstm_model = train_lstm(normed, commodity=name)
-        if len(normed) > window:
-            lstm_fc = lstm_forecast(lstm_model, normed[-window:]) * price_std + price_mean
-        else:
-            lstm_fc = sarima_fc.copy()
-        print(f"  [{name}] LSTM RMSE={l_rmse:.4f} (avg of {len(l_rmses)} windows)")
-    except Exception as e:
-        print(f"  [{name}] LSTM failed: {e}")
-        lstm_fc = sarima_fc.copy()
-        l_rmse  = float("inf")
-
-    # ── Blend: weights follow measured accuracy, not guesswork ────
-    hybrid = HybridModel()
-    hybrid.tune_weights_from_rmse({"baseline": bl_rmse, "sarima": s_rmse, "lstm": l_rmse})
-    forecast_price = float(hybrid.combine(baseline_fc, sarima_fc, lstm_fc)[HORIZON - 1])
-    forecast_price = float(np.clip(forecast_price, current_price * 0.6, current_price * 1.4))
-
-    pct_change   = (forecast_price - current_price) / (current_price + 1e-9)
-    best_rmse_yf = min(bl_rmse, s_rmse, l_rmse)
-    if not np.isfinite(best_rmse_yf):
-        # Every model failed -- say so with minimum confidence rather than
-        # inventing an error figure from the forecast itself. Treat the
-        # error as infinite (not undefined) so downstream RED-gating in
-        # classify_signal() correctly never calls this "high-confidence".
-        best_rmse_yf = float("nan")
-        rmse_pct_yf  = float("inf")
-        confidence   = 0.50
-    else:
-        rmse_pct_yf = best_rmse_yf / (current_price + 1e-9)
-        confidence  = float(np.clip(0.95 - rmse_pct_yf * 0.5, 0.50, 0.92))
-
-    # Confidence band. With no usable error estimate, fall back to a wide
-    # band rather than a narrow one -- unknown accuracy is not high accuracy.
-    band = (best_rmse_yf * 1.645) if np.isfinite(best_rmse_yf) else (forecast_price * 0.25)
-    lower_bound = round(max(forecast_price - band, forecast_price * 0.5), 4)
-    upper_bound = round(forecast_price + band, 4)
-
-    # Naive baseline comparison -- RMSE vs RMSE, same as the FRED path
-    naive = naive_holdout(prices, horizon=HORIZON, holdout_n=holdout_n)
-    naive_rmse, beat_naive = _naive_rmse(naive, best_rmse_yf)
-    naive_dir  = naive.get("last_value", {}).get("directional_accuracy", float("nan"))
-
-    fi = ForecastInput(
-        commodity=name, current_price=current_price,
-        forecast_price=forecast_price, horizon_weeks=HORIZON,
-        confidence=confidence, weekly_usage_units=10, unit_label=unit,
-        horizon_unit=horizon_unit, days_per_step=step_days,
-        rmse_pct=rmse_pct_yf,
-        beats_naive=bool(beat_naive),
-    )
-    rec = evaluate(fi)
-    vol = compute_volatility_flag(prices, HORIZON)
-
-    return {
-        "commodity":      name,
-        "unit":           unit,
-        "current_price":  round(current_price, 4),
-        "forecast_price": round(forecast_price, 4),
-        "lower_bound":    lower_bound,
-        "upper_bound":    upper_bound,
-        "pct_change":     round(pct_change, 4),
-        "horizon_steps":  HORIZON,
-        "horizon_unit":   horizon_unit,
-        "step_days":      step_days,
-        "horizon_weeks":  HORIZON,   # legacy key, kept so older readers don't break
-        "confidence":     round(confidence, 4),
-        "signal":         rec.signal,
-        "message":        rec.message,
-        "baseline_rmse":  round(bl_rmse, 4),
-        "sarima_rmse":    round(s_rmse, 4),
-        "lstm_rmse":      round(l_rmse, 4),
-        "naive_rmse":     round(naive_rmse, 4) if not np.isnan(naive_rmse) else None,
-        "naive_dir_acc":  round(naive_dir, 4) if not np.isnan(naive_dir) else None,
-        "beat_naive":     beat_naive,
-        "is_estimated":   not is_live,
-        "price_as_of":    str(df["date"].iloc[-1].date()) if not is_live else "live",
-        "lag_weeks":      0.0 if is_live else 0.14,
-        "source":         "yfinance",
-        "rmse_pct":       round(rmse_pct_yf, 6) if np.isfinite(rmse_pct_yf) else None,
         "volatility_flag":   vol["volatility_flag"],
         "volatility_zscore": vol["volatility_zscore"],
         "recent_move_pct":   vol["recent_move_pct"],
@@ -863,23 +671,6 @@ def run(force_retrain: bool = False, only_commodity: str | None = None,
         except Exception as e:
             print(f"  [{name}] ERROR: {e}")
 
-    # ── yfinance commodities ──────────────────────────────────────────
-    for name, (ticker, unit) in YFINANCE_COMMODITY_MAP.items():
-        if only_commodity and only_commodity.lower() not in name.lower():
-            continue
-        if name in already_done:
-            continue
-        print(f"\n{'='*50}\nTraining: {name} (yfinance:{ticker})")
-        try:
-            row = train_yfinance_commodity(name, ticker, unit)
-            if row:
-                rows.append(row)
-                _flush(rows, flush_path)
-                print(f"  → signal={row['signal']}  current=${row['current_price']:.3f}  "
-                      f"forecast=${row['forecast_price']:.3f}  ({row['pct_change']:+.1%})")
-        except Exception as e:
-            print(f"  [{name}] ERROR: {e}")
-
     if not rows:
         print("\nNo forecasts generated — check data and try again")
         return
@@ -896,7 +687,7 @@ def run(force_retrain: bool = False, only_commodity: str | None = None,
     os.replace(tmp_path, OUTPUTS_PATH)
     if fresh and os.path.exists(PARTIAL_PATH):
         os.remove(PARTIAL_PATH)
-    expected = set(FRED_COMMODITY_MAP) | set(USDA_COMMODITY_MAP) | set(YFINANCE_COMMODITY_MAP)
+    expected = set(FRED_COMMODITY_MAP) | set(USDA_COMMODITY_MAP)
     missing = expected - set(df_out["commodity"])
     if missing and not only_commodity:
         print(f"WARNING: {len(missing)} commodities failed and are absent from this run: {sorted(missing)}")

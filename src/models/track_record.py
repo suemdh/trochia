@@ -26,34 +26,17 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from models.train_pipeline import HISTORY_PATH
-from models.backfill_volatility import load_prices
+from models.backfill_volatility import load_series
 
 RESULTS_PATH = os.path.join(ROOT, "outputs", "track_record.csv")
 
 
 def actual_price_near(name: str, target_date: pd.Timestamp):
     """Nearest available actual price to target_date, from the same raw
-    data train_pipeline.py reads (works for FRED/USDA/yfinance alike)."""
+    data train_pipeline.py reads."""
     try:
-        prices = load_prices(name)
-    except Exception:
-        return None
-    # load_prices returns values only, not dates -- re-read dates alongside
-    # for the nearest-date lookup. Cheap: these files are small.
-    from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP, yfinance_safe_name
-    if name in FRED_COMMODITY_MAP:
-        col, _ = FRED_COMMODITY_MAP[name]
-        df = pd.read_csv(os.path.join(ROOT, "data", "raw", "fred_data.csv"), parse_dates=["date"])
-        df = df[["date", col]].dropna().rename(columns={col: "value"})
-    elif name in USDA_COMMODITY_MAP:
-        key, _ = USDA_COMMODITY_MAP[name]
-        df = pd.read_csv(os.path.join(ROOT, "data", "raw", f"usda_{key}.csv"), parse_dates=["date"]).dropna(subset=["value"])
-    elif name in YFINANCE_COMMODITY_MAP:
-        safe = yfinance_safe_name(name)
-        df = pd.read_csv(os.path.join(ROOT, "data", "raw", f"yfinance_{safe}.csv"), parse_dates=["date"])
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-        df = df.dropna(subset=["value"])
-    else:
+        df = load_series(name)
+    except Exception:  # commodity since removed, or its data file missing
         return None
     if df.empty:
         return None

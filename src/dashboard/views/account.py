@@ -5,21 +5,21 @@ import streamlit as st
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth import (login_form, signup_form, logout, get_current_user, save_commodity_prefs,
                   request_password_reset, reset_password, PLAN_COMMODITY_LIMIT)
-from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP
+from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP
 import mailer
 
 PLAN_COLOR = {"Starter":"#007A8E","Pro":"#21C55D","Business":"#F0B429","Trial":"#A8DBB9"}
 # Only what exists today -- keep in step with views/pricing.py.
 PLAN_FEATURES = {
-    "Trial":    ["All commodities", "Weekly forecasts with live prices", "Full charts", "Savings calculator"],
-    "Starter":  ["Up to 5 commodities", "Weekly forecasts with live prices", "Price charts", "Savings calculator"],
-    "Pro":      ["All commodities", "Weekly forecasts with live prices", "Full charts", "Savings calculator"],
+    "Trial":    ["All commodities", "Weekly forecasts", "Full charts", "Savings calculator"],
+    "Starter":  ["Up to 5 commodities", "Weekly forecasts", "Price charts", "Savings calculator"],
+    "Pro":      ["All commodities", "Weekly forecasts", "Full charts", "Savings calculator"],
     "Business": ["Everything in Pro", "Priority email support"],
 }
 
 # The commodities actually forecast -- this used to be a hand-typed copy that
 # still offered discontinued items (Tuna, Peanut Butter, Apples, Lumber).
-ALL_COMMODITIES = [*FRED_COMMODITY_MAP, *USDA_COMMODITY_MAP, *YFINANCE_COMMODITY_MAP]
+ALL_COMMODITIES = [*FRED_COMMODITY_MAP, *USDA_COMMODITY_MAP]
 
 
 def render():

@@ -18,7 +18,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP, yfinance_safe_name
+from commodity_maps import FRED_COMMODITY_MAP, USDA_COMMODITY_MAP
 
 
 def run():
@@ -34,13 +34,6 @@ def run():
         path = os.path.join(ROOT, "data", "raw", f"usda_{key}.csv")
         if os.path.exists(path):
             s = pd.read_csv(path)["value"].dropna()
-            if len(s):
-                ranges[name] = (round(float(s.min()) * 0.5, 4), round(float(s.max()) * 2.0, 4))
-
-    for name, (_ticker, _unit) in YFINANCE_COMMODITY_MAP.items():
-        path = os.path.join(ROOT, "data", "raw", f"yfinance_{yfinance_safe_name(name)}.csv")
-        if os.path.exists(path):
-            s = pd.to_numeric(pd.read_csv(path)["value"], errors="coerce").dropna()
             if len(s):
                 ranges[name] = (round(float(s.min()) * 0.5, 4), round(float(s.max()) * 2.0, 4))
 

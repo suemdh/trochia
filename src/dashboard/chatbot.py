@@ -15,11 +15,11 @@ ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY")
 SYSTEM_PROMPT = f"""You are the Trochiá assistant — a helpful, concise expert on commodity price risk for small businesses.
 
 Trochiá is a commodity intelligence platform that tracks {TOTAL_COMMODITIES} commodities -- retail
-grocery items (via FRED/BLS and USDA) and exchange-traded futures (via Yahoo Finance) -- using
+grocery items, fuel, grains and livestock, all from U.S. government data (FRED/BLS, EIA, USDA) -- using
 machine learning forecasts (SARIMA + LSTM hybrid models). It gives "Buy ahead" / "Watch" / "No action needed" signals
 to help restaurants and small food businesses decide when to buy in bulk. Each commodity has its
-own forecast horizon: weeks for exchange-traded futures, months for grocery items sourced from
-government data (since that data itself is only published monthly).
+own forecast horizon: weeks for daily/weekly data (fuel, USDA cash prices), months for
+grocery items (since that data itself is only published monthly).
 
 Answer questions about:
 - How to read the signals (No action needed = steady or falling, Watch = may rise, Buy ahead = likely to rise)
@@ -40,7 +40,7 @@ FAQ = [
     },
     {
         "keywords": ["commodity", "track", "what", "include", "list"],
-        "answer": f"Trochiá tracks {TOTAL_COMMODITIES} commodities across proteins, dairy, produce, bakery goods, grains, energy, and metals -- see the Market tab for the full live list. Retail grocery items come from FRED/USDA; exchange-traded futures (grains, energy, metals) come from Yahoo Finance."
+        "answer": f"Trochiá tracks {TOTAL_COMMODITIES} commodities across proteins, dairy, produce, bakery goods, grains, and energy -- see the Market tab for the full list. All prices are public U.S. government data: grocery items from FRED/BLS, fuel from the EIA, and grains, cattle and hogs from USDA."
     },
     {
         "keywords": ["forecast", "model", "predict", "accurate", "how"],
@@ -48,11 +48,11 @@ FAQ = [
     },
     {
         "keywords": ["data", "source", "where", "come from", "fred", "usda"],
-        "answer": f"Retail grocery prices ({len(FRED_COMMODITY_MAP)} items — beef, chicken, eggs, dairy, produce, bakery, and more) come from FRED/BLS. Cash wheat and wholesale cream prices come from USDA AMS. Exchange-traded futures (energy, grains, metals) come from Yahoo Finance."
+        "answer": f"Retail grocery prices ({len(FRED_COMMODITY_MAP)} items — beef, chicken, eggs, dairy, produce, bakery, and more) come from FRED/BLS. Fuel prices come from the EIA. Cash grain, rice, soybean oil, cattle, hog, wheat and cream prices come from USDA."
     },
     {
         "keywords": ["refresh", "update", "live", "real time", "current"],
-        "answer": "FRED and USDA retail data updates on their own schedule (FRED: 4-6 week lag; USDA: same day to a few days). Yahoo Finance futures prices are exchange-delayed about 15 minutes. You can set auto-refresh in the sidebar."
+        "answer": "Each source updates on its own schedule: grocery prices monthly (4-6 week lag), fuel weekly or daily (about a week behind), USDA cash prices same day to a week. Forecasts are retrained every week."
     },
     {
         "keywords": ["scenario", "calculator", "savings", "pre-buy", "bulk"],

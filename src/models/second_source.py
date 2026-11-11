@@ -3,13 +3,11 @@ Independent second price source: Alpha Vantage's Commodities API, cross-checked
 against the prices this app trains on and displays.
 
 What AV actually returns (inspected directly, 2026-11-02 -- not assumed):
-  - WTI, Brent, Natural Gas: DAILY spot prices for the same benchmark our
-    futures track -> a real like-for-like check.
-  - Sugar: MONTHLY average of the same No. 11 benchmark -> comparable, lagged.
-  - Corn, Wheat: MONTHLY Gulf export price in $/metric ton; Cotton, Coffee:
-    MONTHLY world index prices (Cotlook A, ICO "other milds"). These are
-    different instruments from exchange futures and carry a structural
-    basis/quality premium (corn ran ~34% above CBOT futures in Sept 2026).
+  - WTI, Brent, Natural Gas: DAILY EIA spot prices -- the same series we
+    download from FRED, so this checks our download and scaling, not EIA.
+  - Corn, Wheat: MONTHLY Gulf export price in $/metric ton -- a different
+    market from the USDA cash bids we use (Iowa corn, Kansas City wheat),
+    with a structural basis/transport gap.
 
 So the tolerance depends on how comparable the series is:
   - "same":    15% -- a real mismatch means something is wrong with our data.
@@ -22,7 +20,7 @@ set by what each series is, and the reason is stated per row.
 AV's own "unit" field is checked on every call -- if AV ever changes a
 series' unit, the row reports that instead of silently mis-scaling.
 
-The other 35 commodities have no second source here (stooq.com, tried first,
+The other commodities have no second source here (stooq.com, tried first,
 is now behind a JS challenge wall). They report "n/a", never a fake pass.
 
 Needs ALPHA_VANTAGE_API_KEY in .env. Free tier: 25 requests/day and 1/second,
@@ -54,15 +52,12 @@ AV_COMMODITIES = {
     "Crude Oil (WTI)":   ("WTI",         "dollars per barrel",      1.0,                     "same"),
     "Crude Oil (Brent)": ("BRENT",       "dollars per barrel",      1.0,                     "same"),
     "Natural Gas":       ("NATURAL_GAS", "dollars per million BTU", 1.0,                     "same"),
-    "Sugar (11)":        ("SUGAR",       "cents per pound",         0.01,                    "same"),
-    "Wheat":             ("WHEAT",       "dollar per metric ton",   60 / LB_PER_METRIC_TON,  "related"),  # 60 lb/bu
+    "Wheat (USDA Cash)": ("WHEAT",       "dollar per metric ton",   60 / LB_PER_METRIC_TON,  "related"),  # 60 lb/bu
     "Corn":              ("CORN",        "dollar per metric ton",   56 / LB_PER_METRIC_TON,  "related"),  # 56 lb/bu
-    "Cotton":            ("COTTON",      "cents per pound",         0.01,                    "related"),
-    "Coffee (Arabica)":  ("COFFEE",      "cents per pound",         0.01,                    "related"),
 }
 TOLERANCE = {"same": 0.15, "related": 0.50}
-WHY = {"same": "same benchmark",
-       "related": "different instrument (export/index price incl. basis) -- gross-error check only"}
+WHY = {"same": "same EIA benchmark",
+       "related": "different market (export price vs US cash bid) -- gross-error check only"}
 
 CACHE_DIR = os.path.join(ROOT, "data", "raw")
 CACHE_TTL_SECONDS = 86400
@@ -91,26 +86,18 @@ def fetch_av_raw(function: str) -> dict:
 
 
 def our_value_on(name: str, date_str: str, interval: str) -> float | None:
-    """Our own source's (yfinance) price for the SAME date as AV's data point --
-    the daily close on/after that date, or that month's average close for a
-    monthly AV series. Comparing AV's Oct-27 value against today's live price
-    would test market movement, not whether the two sources agree."""
-    import yfinance as yf
-    from commodity_maps import YFINANCE_COMMODITY_MAP
-    from data.fetch_yfinance import TICKERS
-    ticker = YFINANCE_COMMODITY_MAP[name][0]
-    scale = TICKERS[ticker][2]
+    """Our own price for the SAME date as AV's data point -- the first value
+    on/after that date, or that month's average for a monthly AV series.
+    Comparing AV's Oct-27 value against today's price would test market
+    movement, not whether the two sources agree."""
+    from models.backfill_volatility import load_series
+    df = load_series(name)
     d = pd.Timestamp(date_str)
-    end = d + (pd.offsets.MonthBegin(1) if interval == "monthly" else pd.Timedelta(days=6))
-    h = yf.download(ticker, start=d, end=end, interval="1d", progress=False, auto_adjust=True)
-    if h.empty:
-        return None
-    closes = h["Close"]
-    closes = closes.iloc[:, 0] if isinstance(closes, pd.DataFrame) else closes
-    closes = closes.dropna()
-    if closes.empty:
-        return None
-    return round(float(closes.mean() if interval == "monthly" else closes.iloc[0]) * scale, 4)
+    if interval == "monthly":
+        vals = df[(df["date"] >= d) & (df["date"] < d + pd.offsets.MonthBegin(1))]["value"]
+        return round(float(vals.mean()), 4) if len(vals) else None
+    vals = df[(df["date"] >= d) & (df["date"] <= d + pd.Timedelta(days=6))]["value"]
+    return round(float(vals.iloc[0]), 4) if len(vals) else None
 
 
 def check(name: str, our_price: float) -> dict:

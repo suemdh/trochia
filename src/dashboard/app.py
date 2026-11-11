@@ -25,7 +25,7 @@ from auth import get_current_user, logout, PLAN_COMMODITY_LIMIT, PREVIEW_COUNT, 
 from views import home, market, billing, chat
 from views import commodities as commodities_view
 from views import help_page, pricing, account, legal
-from commodity_maps import TOTAL_COMMODITIES, PLAUSIBLE_RANGE, YFINANCE_COMMODITY_MAP
+from commodity_maps import TOTAL_COMMODITIES
 from decision.engine import evaluate, ForecastInput
 
 # â”€â”€ Transparent PNG conversion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -81,29 +81,8 @@ def load_forecasts():
         return None
     return pd.read_csv(FORECASTS_PATH)
 
-@st.cache_data(ttl=120)
-def load_live_prices():
-    """Fetch yfinance live prices; return dict or empty dict on failure."""
-    try:
-        from data.fetch_yfinance import fetch_live_prices
-        return fetch_live_prices()
-    except Exception as _e:
-        return {}
-
-@st.cache_data(ttl=3600)
-def load_contract_symbols():
-    """Exact active contract per ticker (e.g. 'HEZ26.CME'), cached 1hr client-side
-    on top of fetch_yfinance's own 24hr file cache -- cheap either way."""
-    try:
-        from data.fetch_yfinance import fetch_contract_symbols
-        return fetch_contract_symbols()
-    except Exception:
-        return {}
-
 def build_commodities():
     df           = load_forecasts()
-    live_prices  = load_live_prices()
-    contracts    = load_contract_symbols()
 
     # Apply commodity_prefs filter for logged-in users
     user  = get_current_user()
@@ -118,40 +97,13 @@ def build_commodities():
         for _, row in df.iterrows():
             name = row["commodity"]
 
-            # Override current_price with live yfinance price if available
-            is_live      = False
             price_as_of  = str(row.get("price_as_of", ""))
             current      = float(row["current_price"])
             is_estimated = bool(row.get("is_estimated", True))
             forecast     = float(row["forecast_price"])
-            price_rejected = False
 
-            if name not in live_prices:
-                from audit_log import log_price_fetch
-                log_price_fetch(name, str(row.get("source", "")), current, None, price_as_of, True)
-
-            if name in live_prices:
-                live_price = live_prices[name]["price"]
-                lo, hi = PLAUSIBLE_RANGE.get(name, (None, None))
-                range_ok = lo is None or (lo <= live_price <= hi)
-
-                from audit_log import log_price_fetch
-                log_price_fetch(name, "yfinance", live_price, live_prices[name].get("ticker"),
-                                live_prices[name].get("as_of", ""), range_ok)
-
-                if not range_ok:
-                    # Never silently display a tick outside this commodity's
-                    # plausible range -- that's exactly how a wrong
-                    # symbol/contract/unit from the data source would turn
-                    # into a confidently wrong number on screen. Fall back to
-                    # the last known-good (lag-compensated, already disclosed
-                    # as an estimate) price instead, and say so.
-                    price_rejected = True
-                else:
-                    current      = live_price
-                    is_live      = True
-                    is_estimated = False
-                    price_as_of  = "live"
+            from audit_log import log_price_fetch
+            log_price_fetch(name, str(row.get("source", "")), current, None, price_as_of, True)
 
             # Signal, %, and alert text all come from ONE engine call, on the
             # price actually being displayed -- for every row, not just live
@@ -178,7 +130,7 @@ def build_commodities():
             log_alert(name, sig, pct, current, forecast, float(row["confidence"]),
                       float(row["rmse_pct"]) if pd.notna(row.get("rmse_pct")) else None,
                       bool(bn) if pd.notna(bn) and str(bn) != "False" else False,
-                      message, is_live)
+                      message, False)
 
             result[name] = {
                 "current":      current,
@@ -197,15 +149,11 @@ def build_commodities():
                 "rmse_pct":     float(row["rmse_pct"]) if pd.notna(row.get("rmse_pct")) else None,
                 "naive_rmse":   row.get("naive_rmse", None),
                 "is_estimated": is_estimated,
-                "is_live":      is_live,
                 "price_as_of":  price_as_of,
                 "volatility_flag":   bool(row.get("volatility_flag", False)),
                 "volatility_zscore": row.get("volatility_zscore", None),
                 "recent_move_pct":   row.get("recent_move_pct", None),
                 "sector_flag":       bool(row.get("sector_flag", False)),
-                "price_rejected":    price_rejected,
-                "ticker":            YFINANCE_COMMODITY_MAP.get(name, (None, None))[0],
-                "contract":          contracts.get(YFINANCE_COMMODITY_MAP.get(name, (None,))[0]),
             }
         if prefs or limit:
             result = {k: v for k, v in result.items() if k in prefs}

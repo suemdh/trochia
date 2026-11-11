@@ -5,7 +5,7 @@ import streamlit as st
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 from commodity_maps import (
-    TOTAL_COMMODITIES, FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP,
+    TOTAL_COMMODITIES, FRED_COMMODITY_MAP, USDA_COMMODITY_MAP,
 )
 
 
@@ -31,9 +31,9 @@ def render():
             <div style="font-size:0.88rem;color:#8BA0B0;line-height:1.7;">
                 Trochiá is a commodity price intelligence platform built for small business owners -
                 restaurants, bakeries, food distributors, and anyone who buys food or energy inputs regularly.
-                It tracks 40+ commodities and uses machine learning to forecast whether prices will
-                rise or fall over each item's forecast horizon (shown on its detail page -- weeks for
-                exchange-traded futures, months for grocery items sourced from government data),
+                It tracks 30+ commodities and uses machine learning to forecast whether prices will
+                rise or fall over each item's forecast horizon (shown on its detail page -- 8 weeks for
+                fuel, grains and livestock, 8 months for monthly grocery prices),
                 giving you time to act before a spike hits your margins.
             </div>
         </div>
@@ -134,19 +134,21 @@ def render():
         real price once it comes due, so accuracy will be shown from real outcomes, not
         just backtests, as that history builds up.
 
-        **Data and updates.** Futures (oil, grains, metals, livestock): Yahoo Finance,
-        ~15 min exchange delay. Grocery retail prices: FRED/BLS, published monthly with a
-        ~4-8 week lag (shown as "~est."). Cash wheat and cream: USDA AMS, ~1-2 week lag.
-        Forecasts are retrained weekly. Horizon: 8 steps of each source's own reporting
-        interval -- 8 weeks for weekly data (futures, fuel), 8 months for monthly grocery
-        data, 8 days for daily USDA cash wheat. Each card states its horizon.
+        **Data and updates.** All prices are public U.S. government data. Grocery retail
+        prices: FRED/BLS, published monthly with a ~4-8 week lag (each card shows the month).
+        Energy: EIA via FRED -- retail diesel and gasoline weekly, wholesale crude oil,
+        natural gas, gasoline and heating oil daily, about a week behind. Grains, oats,
+        soybean oil, rice, cattle, hogs, wheat and cream: USDA cash prices, same day to a
+        week behind. Forecasts are retrained weekly. Horizon: 8 steps of each source's own
+        reporting interval (daily prices are grouped into weeks) -- 8 weeks or 8 months. Each card
+        states its horizon.
 
         **Limitations.** Forecasts extrapolate historical patterns only -- they can't see
         breaking news, wars, weather events, or slow structural shifts (like a shrinking
         cattle herd). Unusual recent moves are flagged, but treat every forecast as one
         input, not a decision.
 
-        **Disclaimer.** Informational only, not financial advice. Futures and
+        **Disclaimer.** Informational only, not financial advice. Wholesale, cash and
         national-average retail prices are not what your supplier will charge you -- your
         delivered cost includes local basis, freight, and markup.
         """)
@@ -168,7 +170,7 @@ def render():
 
         | Element | What it means |
         |---|---|
-        | **Teal solid line** | Historical price data - real prices from FRED, USDA, or Yahoo Finance |
+        | **Teal solid line** | Historical price data - real prices from FRED (BLS/EIA) or USDA |
         | **Dashed colored line** | Forecast - model-predicted future prices over that commodity's horizon |
         | **Shaded band around forecast** | Likely range - based on the model's own backtest error, not a guaranteed bound |
         | **Color of dashed line** | Matches signal: red = RED, amber = YELLOW, green = GREEN |
@@ -181,10 +183,10 @@ def render():
 
         #### About the data lag
         FRED retail price data is published with a **4–6 week lag** - the most recent point
-        on the chart may be from 4–6 weeks ago, not today. Yahoo Finance futures prices are
-        exchange-delayed **~15 minutes**. The forecast extends from the most recent available
-        data point across a horizon that depends on the commodity's own data frequency -
-        weeks for exchange-traded futures, months for grocery items sourced from government data.
+        on the chart may be from 4–6 weeks ago, not today. Daily and weekly prices (fuel,
+        USDA cash prices) are usually a few days to a week behind. The forecast extends from the
+        most recent available data point across a horizon that depends on the commodity's own
+        data frequency - weeks for daily/weekly data, months for monthly grocery prices.
         """)
 
     with tabs[3]:
@@ -281,7 +283,7 @@ def render():
         st.markdown(f"""
         #### Your 14-day free trial
         - Starts the moment you create your account -- no credit card needed
-        - Full access to all {TOTAL_COMMODITIES} commodities, weekly forecasts with live prices,
+        - Full access to all {TOTAL_COMMODITIES} commodities, weekly forecasts,
           charts, and the savings calculator
         - Paid plans are coming soon -- we'll let you know before anything about your access changes
 
@@ -315,32 +317,26 @@ def render():
         <div class="sig-card sig-card-blue" style="margin-bottom:1rem;">
             <div style="font-size:1rem;font-weight:700;color:#FFFFFF;margin-bottom:0.5rem;">Data sources</div>
             <div style="font-size:0.88rem;color:#8BA0B0;line-height:1.7;">
-                Trochiá pulls from three live data sources that actually feed the forecasts you see.
-                All data is from free-tier APIs - no cost to you. Each has a different update
-                frequency and lag.
+                Trochiá uses two public U.S. government data sources, and nothing else feeds the
+                forecasts you see. Each series has its own update frequency and lag.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown(f"""
-        #### FRED / Bureau of Labor Statistics
+        #### FRED (Bureau of Labor Statistics and Energy Information Administration)
         **Commodities ({len(FRED_COMMODITY_MAP)}):** {", ".join(FRED_COMMODITY_MAP.keys())}
 
-        The Federal Reserve Economic Data (FRED) system publishes retail price surveys from the BLS.
-        These are average U.S. retail prices - real consumer prices, not futures or wholesale.
-        **Lag: 4–6 weeks.** Data is collected monthly and published with a delay.
+        Grocery items are BLS average U.S. retail prices, collected monthly and published with a
+        **4–6 week lag**. Fuel is from the EIA: retail diesel and gasoline weekly, and wholesale
+        spot prices for crude oil, natural gas, gasoline and heating oil daily, **about a week behind**.
 
         #### USDA AMS Market News
         **Commodities ({len(USDA_COMMODITY_MAP)}):** {", ".join(USDA_COMMODITY_MAP.keys())}
 
-        Cash bids and wholesale dairy prices reported directly by USDA market reporters,
-        filtered to one consistent grade/class per commodity. **Lag: same day to a few days.**
-
-        #### Yahoo Finance (yfinance)
-        **Commodities ({len(YFINANCE_COMMODITY_MAP)}):** {", ".join(YFINANCE_COMMODITY_MAP.keys())}
-
-        Exchange-traded futures prices - grains, energy, metals, and softs. No API key required.
-        **Lag: ~15 minutes** (standard exchange delay).
+        Cash grain bids, wholesale dairy and rice prices reported by USDA market reporters, plus
+        the cattle and hog prices meatpackers are required by law to report to USDA. Filtered to
+        one consistent grade/class per commodity. **Lag: same day to a week.**
 
         #### Refreshing data
         To pull the latest data and retrain forecasts, run this from the project root:
@@ -348,5 +344,5 @@ def render():
         python main.py
         python src/models/train_pipeline.py
         ```
-        The sidebar shows "Live forecasts" when fresh data is loaded, or "Demo data" if not.
+        The sidebar shows "Forecasts loaded" when forecast data is available.
         """)

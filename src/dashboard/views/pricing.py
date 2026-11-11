@@ -19,7 +19,7 @@ PLANS = [
         "featured": False,
         "features": [
             (True,  "Up to 5 commodities"),
-            (True,  "Weekly forecasts with live market prices"),
+            (True,  "Weekly forecasts from government price data"),
             (True,  "Price charts"),
             (True,  "Savings calculator"),
             (SOON,  "Email alerts when an item turns Buy ahead"),
@@ -35,7 +35,7 @@ PLANS = [
         "featured": True,
         "features": [
             (True,  f"All {TOTAL_COMMODITIES} commodities"),
-            (True,  "Weekly forecasts with live market prices"),
+            (True,  "Weekly forecasts from government price data"),
             (True,  "Full price history charts"),
             (True,  "Savings calculator"),
             (True,  "Margin of error and likely price range on every forecast"),

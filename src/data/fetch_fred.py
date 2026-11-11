@@ -52,6 +52,15 @@ SERIES_IDS = {
     # ── Energy (retail) ─────────────────────────────────────────────
     "diesel_price":      "GASDESW",       # On-highway diesel, $/gal
     "gasoline_retail":   "GASREGCOVW",    # Regular unleaded gasoline, $/gal
+
+    # ── Energy (wholesale spot, EIA, daily) ── public domain, unlike exchange
+    # futures prices, which need a licence to show to paying users.
+    "brent_spot":        "DCOILBRENTEU",  # Brent crude, $/barrel
+    "wti_spot":          "DCOILWTICO",    # WTI crude (Cushing), $/barrel
+    "natgas_spot":       "DHHNGSP",       # Henry Hub natural gas, $/MMBtu
+    "gasoline_spot":     "DGASNYH",       # Conventional gasoline, NY Harbor, $/gal
+    "heating_oil_spot":  "DHOILNYH",      # No. 2 heating oil, NY Harbor, $/gal
+
 }
 
 

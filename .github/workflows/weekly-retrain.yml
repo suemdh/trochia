@@ -44,7 +44,7 @@ jobs:
           key: models-${{ github.run_id }}
           restore-keys: models-
 
-      - name: Fetch fresh data (FRED, USDA, futures history)
+      - name: Fetch fresh data (FRED, USDA)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           USDA_API_KEY: ${{ secrets.USDA_API_KEY }}

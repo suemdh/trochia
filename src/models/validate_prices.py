@@ -5,14 +5,14 @@ unit, and whether the price is plausible for that commodity (commodity_maps.PLAU
 Three checks, none of which trust a single number blindly:
   1. Range check: is the price plausible for this commodity at all (catches
      unit errors, wrong contract, wrong series, a garbage tick)?
-  2. Continuity check: how far did the price move from its own previous
-     close (catches a corrupted/mis-scaled single tick, as distinct from
+  2. Continuity check: how far did the latest published price move from
+     the one before it (catches a corrupted/mis-scaled single tick, as distinct from
      genuine market volatility, which the volatility/sector flags already
      handle elsewhere).
   3. Independent source (see second_source.py): Alpha Vantage, for the 8
      commodities it covers -- strict where it's the same benchmark, a
-     gross-error check where it's only a related market. The other 35
-     report "n/a" rather than a faked pass.
+     gross-error check where it's only a related market. The rest report
+     "n/a" rather than a faked pass.
 
 Usage:
     python src/models/validate_prices.py
@@ -27,13 +27,14 @@ ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from commodity_maps import PLAUSIBLE_RANGE, YFINANCE_COMMODITY_MAP
-from data.fetch_yfinance import fetch_live_prices
+from commodity_maps import PLAUSIBLE_RANGE, is_monthly
+from models.backfill_volatility import load_series
 from models.second_source import check as second_source_check
 
 OUTPUTS_PATH = os.path.join(ROOT, "outputs", "forecasts.csv")
-CONTINUITY_FLAG_PCT = 0.20  # a single-tick jump bigger than this from its own
-                             # previous close is worth a human look
+CONTINUITY_FLAG_PCT = 0.50  # a jump this big between consecutive daily/weekly
+                             # prices is far more likely a unit or scaling error than
+                             # a real move (spot natural gas alone can move 20%+ a day)
 
 
 def run() -> pd.DataFrame:
@@ -42,22 +43,20 @@ def run() -> pd.DataFrame:
         return pd.DataFrame()
 
     forecasts = pd.read_csv(OUTPUTS_PATH)
-    live = fetch_live_prices()
 
     rows = []
     for _, r in forecasts.iterrows():
         name = r["commodity"]
         price = float(r["current_price"])
         source = r.get("source", "")
-        ticker = YFINANCE_COMMODITY_MAP.get(name, (None, None))[0]
         as_of = r.get("price_as_of", "")
-        prev_close = None
-
-        if name in live:
-            price = live[name]["price"]
-            ticker = live[name]["ticker"]
-            as_of = live[name]["as_of"]
-            prev_close = live[name].get("prev_close")
+        try:  # the published price before the latest one
+            hist = load_series(name)["value"]
+            # monthly averages a month apart aren't a single tick -- skip them
+            prev_close = float(hist.iloc[-2]) if len(hist) > 1 and not is_monthly(name) else None
+            latest = float(hist.iloc[-1])
+        except Exception:
+            prev_close = None
 
         lo, hi = PLAUSIBLE_RANGE.get(name, (None, None))
         range_ok = (lo is not None) and (lo <= price <= hi)
@@ -65,7 +64,7 @@ def run() -> pd.DataFrame:
         continuity_ok = True
         continuity_pct = None
         if prev_close:
-            continuity_pct = abs(price - prev_close) / (prev_close + 1e-9)
+            continuity_pct = abs(latest - prev_close) / (prev_close + 1e-9)
             continuity_ok = continuity_pct <= CONTINUITY_FLAG_PCT
 
         sc = second_source_check(name, price)
@@ -79,7 +78,6 @@ def run() -> pd.DataFrame:
             "price":          round(price, 4),
             "unit":           r.get("unit", ""),
             "source":         source,
-            "ticker":         ticker or "",
             "as_of":          as_of,
             "plausible_range": f"{lo}-{hi}" if lo is not None else "n/a",
             "range_check":    "PASS" if range_ok else "FAIL",

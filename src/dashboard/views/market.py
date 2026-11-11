@@ -2,10 +2,8 @@
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timezone
-from commodity_maps import strip_unit, FRED_COMMODITY_MAP
+from commodity_maps import strip_unit, is_monthly
 
-# BLS average-price series are monthly; Diesel and Gasoline are weekly EIA series.
-MONTHLY_GOV = set(FRED_COMMODITY_MAP) - {"Diesel / Freight", "Gasoline"}
 from decision.engine import SIGNAL_LABEL
 
 SIG_COLOR = {"RED":"#FF4B4B","YELLOW":"#F0B429","GREEN":"#21C55D"}
@@ -16,12 +14,11 @@ def render(commodities: dict, search_query: str = ""):
     st.markdown('<div class="sec-header">Market Overview</div>', unsafe_allow_html=True)
 
     now_utc = datetime.now(timezone.utc).strftime("%H:%M UTC")
-    n_live = sum(1 for v in commodities.values() if v.get("is_live"))
     st.markdown(
         f'<p style="color:#8BA0B0;font-size:0.82rem;margin-bottom:1rem;">'
         f'Where prices are headed for everything we track, and what to do about it. '
-        f'<span style="color:#21C55D;font-weight:600;">{n_live} prices are live</span> '
-        f'(about 15 minutes behind the market) &nbsp;·&nbsp; updated {now_utc}</p>',
+        f'Prices come from U.S. government data (USDA, EIA, BLS), updated every week '
+        f'&nbsp;·&nbsp; page loaded {now_utc}</p>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -86,7 +83,6 @@ def render(commodities: dict, search_query: str = ""):
             "_hi":          v.get("upper_bound"),
             "_sig_rank":    SIG_ORDER.get(v["signal"],3),
             "_message":     v.get("message",""),
-            "_is_live":     v.get("is_live", False),
             "_is_estimated":v.get("is_estimated", True),
             "_price_as_of": v.get("price_as_of", ""),
             "_horizon":      v.get("horizon", 8),
@@ -95,9 +91,6 @@ def render(commodities: dict, search_query: str = ""):
             "_volatility_zscore": v.get("volatility_zscore", None),
             "_recent_move_pct":   v.get("recent_move_pct", None),
             "_sector_flag":       v.get("sector_flag", False),
-            "_price_rejected":    v.get("price_rejected", False),
-            "_ticker":            v.get("ticker", None),
-            "_contract":          v.get("contract", None),
         })
 
     if sort_by == "Most urgent first":
@@ -121,9 +114,7 @@ def render(commodities: dict, search_query: str = ""):
         pct   = r["Change"]
         pct_str = f"+{pct:.1f}%" if pct >= 0 else f"{pct:.1f}%"
 
-        if r["_is_live"]:
-            price_badge = '<span style="background:#21C55D;color:#fff;font-size:0.65rem;font-weight:700;padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">LIVE</span>'
-        elif r["_is_estimated"]:
+        if r["_is_estimated"]:
             as_of = r["_price_as_of"]
             tip   = (f"Government price data is published with a delay; last data: {as_of}"
                      if as_of else "Estimated from the latest government data")
@@ -134,29 +125,14 @@ def render(commodities: dict, search_query: str = ""):
         vol_suffix = "  ·  ⚠ Prices jumping" if r["_volatility_flag"] else ""
         with st.expander(f"{r['Commodity']}  ·  {pct_str}  ·  {SIGNAL_LABEL[sig]}{vol_suffix}"):
             st.markdown(price_badge, unsafe_allow_html=True)
-            if r["_contract"]:
-                ticker_note = f"Price from the {r['_contract']} futures contract"
-            else:
-                ticker_note = "Price from U.S. government data (FRED / USDA)"
             as_of = r["_price_as_of"]
-            if r["Commodity"] in MONTHLY_GOV and as_of[:7].count("-") == 1:
+            if is_monthly(r["Commodity"]) and as_of[:7].count("-") == 1:
                 # BLS monthly averages are dated the 1st ("2026-09-01" = the September
                 # average), which read like a two-month-old daily price.
                 month = datetime.strptime(as_of[:7], "%Y-%m").strftime("%B %Y")
                 st.caption(f"{month} average · the latest the U.S. government has published (updated monthly)")
             else:
-                st.caption(f"{ticker_note}  ·  as of {as_of or 'unknown'}")
-
-            if r["_price_rejected"]:
-                st.markdown("""
-                <div class="sig-card sig-card-red" style="padding:0.65rem 1rem;margin-bottom:0.75rem;">
-                    <span style="font-size:0.85rem;color:#FFFFFF;font-weight:600;">⚠ Live price unavailable right now</span><br>
-                    <span style="font-size:0.8rem;color:#8BA0B0;">
-                        The latest price we received didn't look right, so we're showing the last
-                        reliable price instead of a possibly wrong one.
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
+                st.caption(f"Price from U.S. government data (FRED / USDA)  ·  as of {as_of or 'unknown'}")
 
             if r["_volatility_flag"]:
                 move = r["_recent_move_pct"]

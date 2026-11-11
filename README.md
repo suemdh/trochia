@@ -6,9 +6,10 @@ GREEN/YELLOW/RED buy signals through a Streamlit dashboard.
 
 ## What's included
 
-- **Data fetchers** for three live sources: FRED/BLS (retail grocery prices), USDA AMS (cash
-  wheat bids, wholesale cream), and Yahoo Finance (exchange-traded futures — grains, energy,
-  metals, softs, livestock). See `src/commodity_maps.py` for the exact list — it's the single
+- **Data fetchers** for two public government sources: FRED (BLS retail grocery prices, EIA
+  fuel prices) and USDA (cash grain/rice/soybean-oil prices, wholesale cream, and mandatory
+  cattle/hog reports). Exchange futures (Yahoo Finance) were removed in Nov 2026 -- they can't be
+  shown to paying users without a licence. See `src/commodity_maps.py` for the exact list — it's the single
   source of truth both the training pipeline and the dashboard read from, so they can't drift
   out of sync.
 - **Cleaning pipeline** that merges FRED/USDA raw data into one consistent weekly dataset
@@ -17,12 +18,12 @@ GREEN/YELLOW/RED buy signals through a Streamlit dashboard.
   output isn't currently consumed by the live training pipeline (see Known limitations)
 - **3 models per commodity**: Linear baseline, SARIMA (auto-tuned via `pmdarima` when
   installed), LSTM — blended by a RMSE-weighted Hybrid model
-- **Lag compensation** (`src/data/lag_compensator.py`) projects a current-price estimate from
-  lagged monthly government data, with a staleness ceiling so a discontinued series can't be
-  silently mislabeled as a live, high-confidence price
+- **Staleness check** (`src/data/lag_compensator.py`): the price shown is always the latest
+  official number with its date; a series that has gone dark (e.g. discontinued by BLS) is
+  skipped instead of being shown as current
 - **Decision engine** (`src/decision/engine.py`) turns a forecast into GREEN/YELLOW/RED with a
-  dollar-quantified recommendation, aware of each commodity's own forecast horizon (weeks for
-  futures, months for grocery items — see `horizon_unit`)
+  dollar-quantified recommendation, aware of each commodity's own forecast horizon (weeks or
+  months, matching the data — see `horizon_unit`)
 - **Dashboard** (Streamlit) — Market list, per-commodity charts + scenario calculator, a real
   Claude-API-backed AI Chat page (falls back to a static FAQ if no `ANTHROPIC_API_KEY` is set),
   pricing/billing/profile pages
@@ -33,8 +34,7 @@ GREEN/YELLOW/RED buy signals through a Streamlit dashboard.
 2. Copy the API keys you have into a `.env` file at the project root (see below — none are
    hardcoded or bundled, you need your own)
 3. `python main.py` — fetches fresh FRED + USDA data into `data/raw/` and `data/processed/`
-4. `python src/models/train_pipeline.py` — trains all commodities (fetching yfinance history on
-   demand as it goes) and writes `outputs/forecasts.csv` (this is what the dashboard reads)
+4. `python src/models/train_pipeline.py` — trains all commodities and writes `outputs/forecasts.csv` (this is what the dashboard reads)
 5. `streamlit run src/dashboard/app.py`
 
 ## API keys (`.env`)
@@ -42,10 +42,10 @@ GREEN/YELLOW/RED buy signals through a Streamlit dashboard.
 | Var | Required for | Free signup |
 |---|---|---|
 | `FRED_API_KEY` | Retail grocery prices | fred.stlouisfed.org/docs/api/api_key.html |
-| `USDA_API_KEY` | Cash wheat / cream prices | mymarketnews.ams.usda.gov/mars-api/getting-started (MARS API specifically — USDA has other, incompatible key systems) |
+| `USDA_API_KEY` | USDA cash prices (grains, rice, soybean oil, wheat, cream) | mymarketnews.ams.usda.gov/mars-api/getting-started (MARS API specifically — USDA has other, incompatible key systems) |
 | `ANTHROPIC_API_KEY` | AI Chat (optional — falls back to static FAQ without it) | console.anthropic.com |
 
-That's the whole list. Yahoo Finance (grains/energy/metals futures) needs no key at all. Earlier
+That's the whole list (USDA's cattle/hog reports need no key). Earlier
 drafts also fetched Alpha Vantage, EIA, and NOAA data, but none of it ever fed the live forecasts
 or dashboard, so those fetchers were removed rather than left as unused dead weight.
 
@@ -61,7 +61,6 @@ trochia/
 │   ├── data/
 │   │   ├── fetch_fred.py
 │   │   ├── fetch_usda.py
-│   │   ├── fetch_yfinance.py  # Called on demand by train_pipeline.py, not by main.py
 │   │   ├── lag_compensator.py
 │   │   └── clean.py
 │   ├── features/
@@ -86,7 +85,7 @@ trochia/
 ## Known limitations
 
 - **`data/processed/features.csv` isn't read by the live pipeline.** `train_pipeline.py` trains
-  directly off `data/raw/fred_data.csv`, `data/raw/usda_*.csv`, and yfinance history — not the
+  directly off `data/raw/fred_data.csv`, and `data/raw/usda_*.csv` — not the
   engineered features file. The feature-engineering step still runs (via `main.py`) but its
   output is currently unused; wiring it in (or dropping the step) is a reasonable next call.
 - Three FRED-tracked items (canned tuna, apples, peanut butter) were dropped from

@@ -71,10 +71,70 @@ def _extract_wheat(records: list) -> list:
     return out
 
 
-# report_id -> (needs allSections to reach the detail rows, extractor fn)
+def _price(r) -> float | None:
+    """avg_price when the report gives one, else the middle of its low/high."""
+    if r.get("avg_price") not in (None, ""):
+        return float(r["avg_price"])
+    lo = r.get("price Min", r.get("price_min", r.get("low_price")))
+    hi = r.get("price Max", r.get("price_max", r.get("high_price")))
+    return (float(lo) + float(hi)) / 2 if lo not in (None, "") and hi not in (None, "") else None
+
+
+def _cash_grain(commodity: str, delivery_point: str | None = None, scale: float = 1.0):
+    """One price per day: the average across every region/elevator quoting
+    `commodity` in the report (e.g. Iowa's six regions -> a state average)."""
+    def extract(records: list) -> list:
+        out = []
+        for r in records:
+            if _norm(r.get("commodity")) != _norm(commodity):
+                continue
+            if delivery_point and _norm(r.get("delivery_point")) != _norm(delivery_point):
+                continue
+            p = _price(r)
+            if p is not None:
+                out.append((r.get("report_date"), p * scale))
+        return out
+    return extract
+
+
+def _extract_rice(records: list) -> list:
+    """Long-grain white milled rice, Arkansas (the largest US producer), $/cwt."""
+    return [(r.get("report_date"), _price(r)) for r in records
+            if _norm(r.get("commodity")) == "milled rice" and _norm(r.get("class")) == "long white"
+            and _norm(r.get("trade_location")) == "arkansas" and _norm(r.get("period")) == "current"
+            and _price(r) is not None]
+
+
+def _extract_cattle(records: list) -> list:
+    """5-Area weekly steers, live FOB, over 80% Choice -- the cash market CME's
+    live cattle contract settles against. $/cwt -> $/lb."""
+    return [(r.get("report_date"), float(r["weighted_avg_price"]) / 100) for r in records
+            if r.get("class_description") == "STEER" and r.get("selling_basis_description") == "LIVE FOB"
+            and r.get("grade_description") == "Over 80% Choice" and r.get("weighted_avg_price")]
+
+
+def _extract_hogs(records: list) -> list:
+    """National barrows/gilts, all producer-sold purchase types, carcass basis.
+    $/cwt -> $/lb."""
+    return [(r.get("report_date"), float(r["avg_net_price"]) / 100) for r in records
+            if r.get("purchase_type") == "Prod. Sold (All Purchase Types)" and r.get("avg_net_price")]
+
+
+# USDA Livestock Mandatory Reporting -- public, no key; packers are required by
+# law to report these prices, so they're the most complete cash prices there are.
+MPR_URL = "https://mpr.datamart.ams.usda.gov/services/v1.1/reports"
+
+# name -> (report_id, needs allSections, extractor[, base url, section name])
 REPORTS = {
-    "cream": ("1100", False, _extract_cream),
-    "wheat": ("3223", True,  _extract_wheat),
+    "cream":       ("1100", False, _extract_cream),
+    "wheat":       ("3223", True,  _extract_wheat),
+    "corn":        ("2850", True,  _cash_grain("Corn", "Country Elevators")),
+    "soybeans":    ("2850", True,  _cash_grain("Soybeans", "Country Elevators")),
+    "oats":        ("3046", True,  _cash_grain("White Oats")),
+    "soybean_oil": ("3511", True,  _cash_grain("Soybean Oil", scale=0.01)),  # cents -> $/lb
+    "rice":        ("1655", True,  _extract_rice),
+    "live_cattle": ("2477", True,  _extract_cattle, MPR_URL, "Detail"),
+    "lean_hogs":   ("2511", True,  _extract_hogs,   MPR_URL, "Barrows/Gilts"),
 }
 
 
@@ -90,29 +150,33 @@ def _date_windows(start_date: str, end_date: str):
 
 def fetch_report_history(report_id: str, needs_all_sections: bool,
                           start_date: str = FETCH_START,
-                          end_date: str | None = None) -> list:
+                          end_date: str | None = None,
+                          base_url: str = BASE_URL, section: str | None = None) -> list:
     """Page through a report's full history in <=180-day chunks. Returns raw
     detail records (unfiltered)."""
-    if not USDA_API_KEY:
+    mars = base_url == BASE_URL
+    if mars and not USDA_API_KEY:
         raise ValueError("USDA_API_KEY not set. Check your .env file.")
 
     end_date = end_date or date.today().isoformat()
     all_records = []
     for win_start, win_end in _date_windows(start_date, end_date):
+        field = "report_begin_date" if mars else "report_date"
         params = {
-            "q": f"report_begin_date={win_start.strftime('%m/%d/%Y')}:{win_end.strftime('%m/%d/%Y')}",
+            "q": f"{field}={win_start.strftime('%m/%d/%Y')}:{win_end.strftime('%m/%d/%Y')}",
         }
         if needs_all_sections:
             params["allSections"] = "true"
-        url = f"{BASE_URL}/{report_id}"
-        resp = requests.get(url, auth=(USDA_API_KEY, ""), params=params, timeout=30)
+        url = f"{base_url}/{report_id}"
+        resp = requests.get(url, auth=(USDA_API_KEY, "") if mars else None, params=params, timeout=60)
         resp.raise_for_status()
         data = resp.json()
 
         if needs_all_sections:
             # Response is a list of sections; the detail section holds the
             # actual per-item rows (the header section is just metadata).
-            detail = next((s for s in data if s.get("reportSection") != "Report Header"), None)
+            detail = next((s for s in data if (s.get("reportSection") == section if section
+                                               else s.get("reportSection") != "Report Header")), None)
             records = detail.get("results", []) if detail else []
         else:
             records = data.get("results", [])
@@ -124,10 +188,13 @@ def fetch_report_history(report_id: str, needs_all_sections: bool,
 def fetch_all() -> dict:
     """Fetch all configured USDA reports, filtered down to one clean (date, value)
     series each. Returns dict of {name: DataFrame[date, value]}."""
-    results = {}
-    for name, (report_id, needs_all_sections, extractor) in REPORTS.items():
+    results, raw_cache = {}, {}
+    for name, (report_id, needs_all_sections, extractor, *where) in REPORTS.items():
         try:
-            raw = fetch_report_history(report_id, needs_all_sections)
+            if report_id not in raw_cache:  # corn + soybeans share one report
+                raw_cache[report_id] = fetch_report_history(report_id, needs_all_sections, base_url=where[0] if where else BASE_URL,
+                                                            section=where[1] if where else None)
+            raw = raw_cache[report_id]
             rows = extractor(raw)
             if not rows:
                 print(f"WARNING: {name} (report {report_id}) returned no matching rows -- "
@@ -135,7 +202,7 @@ def fetch_all() -> dict:
                 continue
             df = pd.DataFrame(rows, columns=["date", "value"])
             df["date"] = pd.to_datetime(df["date"], format="%m/%d/%Y")
-            df = df.drop_duplicates(subset="date").sort_values("date").reset_index(drop=True)
+            df = df.groupby("date", as_index=False)["value"].mean()  # regions/duplicates -> one price per day
             results[name] = df
         except Exception as e:
             print(f"WARNING: failed to fetch {name} (report {report_id}): {e}")

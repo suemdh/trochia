@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Force -Path "outputs" | Out-Null
 
 "=== Trochia weekly retrain started $(Get-Date) ===" | Tee-Object -FilePath $log
 
-# 1. Refresh raw FRED/USDA data (yfinance is fetched on demand by train_pipeline.py itself).
+# 1. Refresh raw FRED/USDA data.
 & .\.venv\Scripts\python.exe main.py *>> $log
 
 # 2. Re-forecast every commodity. --fresh skips the resume-and-skip behavior

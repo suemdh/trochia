@@ -12,12 +12,12 @@ import pandas as pd
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path[:0] = [os.path.join(ROOT, "src"), ROOT]
 
-from commodity_maps import (FRED_COMMODITY_MAP, USDA_COMMODITY_MAP, YFINANCE_COMMODITY_MAP,
-                            PLAUSIBLE_RANGE, strip_unit)
+from commodity_maps import (FRED_COMMODITY_MAP, USDA_COMMODITY_MAP,
+                            PLAUSIBLE_RANGE, strip_unit, is_monthly)
 from decision.engine import ForecastInput, evaluate, estimate_dollar_impact, horizon_in_weeks
 from data.lag_compensator import estimate_today
 
-ALL = {**FRED_COMMODITY_MAP, **USDA_COMMODITY_MAP, **YFINANCE_COMMODITY_MAP}
+ALL = {**FRED_COMMODITY_MAP, **USDA_COMMODITY_MAP}
 FORECASTS = pd.read_csv(os.path.join(ROOT, "outputs", "forecasts.csv"))
 
 
@@ -99,16 +99,16 @@ def test_stale_data_is_refused():
 
 def test_price_history_is_fresh():
     # Futures history was once fetched only on first run, so forecasts quietly
-    # trained on data that stopped seven weeks earlier. Weekly data: 14 days max.
-    from commodity_maps import yfinance_safe_name
+    # trained on data that stopped seven weeks earlier. Daily/weekly series may
+    # trail by a publication cycle (~3 weeks max); BLS monthly by ~4 months.
+    from models.backfill_volatility import load_series
     today = pd.Timestamp.now().normalize()
     stale = []
-    for name in YFINANCE_COMMODITY_MAP:
-        path = os.path.join(ROOT, "data", "raw", f"yfinance_{yfinance_safe_name(name)}.csv")
-        last = pd.to_datetime(pd.read_csv(path)["date"]).max()
-        if (today - last).days > 14:
+    for name in ALL:
+        last = load_series(name)["date"].max()
+        if (today - last).days > (125 if is_monthly(name) else 21):
             stale.append(f"{name} ({last.date()})")
-    assert not stale, f"price history more than 14 days old: {stale}"
+    assert not stale, f"price history older than expected: {stale}"
 
 
 def test_password_hashing():

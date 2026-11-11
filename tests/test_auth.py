@@ -144,7 +144,7 @@ def test_signup_requires_agreeing_to_terms_and_records_it():
     assert consent.get("version") == auth.TERMS_VERSION and consent.get("at"), consent
 
 
-SEVEN = ["Corn", "Wheat", "Eggs", "Milk", "Butter", "Cheese", "Chicken"]
+SEVEN = ["Corn", "Flour", "Eggs", "Milk", "Butter", "Cheese", "Chicken"]
 
 
 def _market_as(plan, prefs):

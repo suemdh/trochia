@@ -36,6 +36,14 @@ FRED_COMMODITY_MAP = {
     "Oranges":          ("oranges",           "$/lb"),
     "Diesel / Freight": ("diesel_price",      "$/gal"),
     "Gasoline":         ("gasoline_retail",   "$/gal"),
+    # Wholesale energy: EIA daily spot prices (public data) -- these replaced
+    # Yahoo Finance futures, which can't be shown to paying users without an
+    # exchange licence.
+    "Crude Oil (Brent)": ("brent_spot",       "$/barrel"),
+    "Crude Oil (WTI)":   ("wti_spot",         "$/barrel"),
+    "Natural Gas":       ("natgas_spot",      "$/MMBtu"),
+    "Gasoline (Wholesale)": ("gasoline_spot", "$/gal"),
+    "Heating Oil":       ("heating_oil_spot", "$/gal"),
     # NOTE: Tuna (Canned), Apples, and Peanut Butter were removed from this
     # map -- all three are real FRED/BLS series, but BLS discontinued all
     # three in 2017 (see fetch_fred.py's SERIES_IDS, which still fetches them
@@ -52,42 +60,29 @@ FRED_COMMODITY_MAP = {
 USDA_COMMODITY_MAP = {
     "Wheat (USDA Cash)": ("wheat", "$/bushel"),
     "Cream (USDA)":      ("cream", "$/lb"),
+    # Cash prices (see fetch_usda.REPORTS for the exact report behind each).
+    "Corn":              ("corn",        "$/bushel"),
+    "Soybeans":          ("soybeans",    "$/bushel"),
+    "Oats":              ("oats",        "$/bushel"),
+    "Soybean Oil":       ("soybean_oil", "$/lb"),
+    "Rice (Milled)":     ("rice",        "$/cwt"),
+    "Live Cattle":       ("live_cattle", "$/lb"),
+    "Lean Hogs":         ("lean_hogs",   "$/lb"),
 }
 
-# Display name -> (yfinance ticker, unit)
-YFINANCE_COMMODITY_MAP = {
-    "Crude Oil (Brent)":  ("BZ=F", "$/barrel"),
-    "Crude Oil (WTI)":    ("CL=F", "$/barrel"),
-    "Natural Gas":        ("NG=F", "$/MMBtu"),
-    "Gasoline (RBOB)":    ("RB=F", "$/gal"),
-    "Heating Oil":        ("HO=F", "$/gal"),
-    "Wheat":              ("ZW=F", "$/bushel"),
-    "Corn":               ("ZC=F", "$/bushel"),
-    "Soybeans":           ("ZS=F", "$/bushel"),
-    "Soybean Oil":        ("ZL=F", "$/lb"),
-    "Oats":               ("ZO=F", "$/bushel"),
-    "Rough Rice":         ("ZR=F", "$/cwt"),
-    "Coffee (Arabica)":   ("KC=F", "$/lb"),
-    "Cocoa":              ("CC=F", "$/metric ton"),
-    "Sugar (11)":         ("SB=F", "$/lb"),
-    "Cotton":             ("CT=F", "$/lb"),
-    "Orange Juice":       ("OJ=F", "$/lb"),
-    "Live Cattle":        ("LE=F", "$/lb"),
-    "Lean Hogs":          ("HE=F", "$/lb"),
-    "Feeder Cattle":      ("GF=F", "$/lb"),
-    "Copper":             ("HG=F", "$/lb"),
-    "Gold":               ("GC=F", "$/troy oz"),
-    "Silver":             ("SI=F", "$/troy oz"),
-}
+# Yahoo Finance futures were removed 2026-11: Yahoo's terms forbid commercial
+# use and exchanges (CME, ICE) charge licence fees to show their prices to
+# paying users. Coffee/cocoa/sugar/orange-juice futures (ICE) can come back
+# through a licensed vendor; until then BLS retail coffee and sugar (above) cover two.
+
+TOTAL_COMMODITIES = len(FRED_COMMODITY_MAP) + len(USDA_COMMODITY_MAP)
 
 
-TOTAL_COMMODITIES = len(FRED_COMMODITY_MAP) + len(USDA_COMMODITY_MAP) + len(YFINANCE_COMMODITY_MAP)
-
-
-def yfinance_safe_name(name: str) -> str:
-    """Match the exact filename-sanitizing rule fetch_yfinance.py uses when
-    saving history, so lookups always agree on the filename."""
-    return name.lower().replace(" ", "_").replace("/", "_").replace("(", "").replace(")", "")
+def is_monthly(name: str) -> bool:
+    """BLS average prices are monthly; EIA diesel/gasoline are weekly, the
+    *_spot series daily, and USDA reports daily or weekly."""
+    col = FRED_COMMODITY_MAP.get(name, ("",))[0]
+    return bool(col) and not col.endswith("_spot") and col not in ("diesel_price", "gasoline_retail")
 
 
 def strip_unit(unit: str) -> str:
@@ -125,28 +120,18 @@ PLAUSIBLE_RANGE = {
     "Oranges": (0.559, 3.61),
     "Diesel / Freight": (0.99, 13.058),
     "Gasoline": (0.819, 9.688),
+    "Crude Oil (Brent)": (4.56, 276.42),
+    "Crude Oil (WTI)": (5.0, 247.28),  # hand-set floor: spot printed -$37 for one day in Apr 2020
+    "Natural Gas": (0.605, 61.44),
+    "Gasoline (Wholesale)": (0.217, 9.018),
+    "Heating Oil": (0.281, 10.326),
     "Wheat (USDA Cash)": (2.58, 31.44),
     "Cream (USDA)": (0.6375, 9.001),
-    "Crude Oil (Brent)": (10.72, 244.02),
-    "Crude Oil (WTI)": (8.47, 241.34),
-    "Natural Gas": (0.7475, 18.672),
-    "Gasoline (RBOB)": (0.2869, 8.5044),
-    "Heating Oil": (0.3234, 10.1156),
-    "Wheat": (1.9375, 26.96),
-    "Corn": (1.5388, 16.365),
-    "Soybeans": (3.985, 34.91),
-    "Soybean Oil": (0.1252, 1.7834),
-    "Oats": (0.8912, 15.89),
-    "Rough Rice": (4.565, 41.13),
-    "Coffee (Arabica)": (0.4367, 8.395),
-    "Cocoa": (904.5, 23908.0),
-    "Sugar (11)": (0.0486, 0.5554),
-    "Cotton": (0.2549, 3.0466),
-    "Orange Juice": (0.4678, 11.11),
-    "Live Cattle": (0.4249, 5.149),
-    "Lean Hogs": (0.1896, 2.4535),
-    "Feeder Cattle": (0.5413, 7.51),
-    "Copper": (1.0417, 13.553),
-    "Gold": (565.95, 10495.7998),
-    "Silver": (6.1745, 201.85),
+    "Corn": (1.3931, 16.1155),
+    "Soybeans": (4.08, 34.1312),
+    "Oats": (1.4425, 16.02),
+    "Soybean Oil": (0.1983, 1.8805),
+    "Rice (Milled)": (13.4375, 75.0),
+    "Live Cattle": (0.4762, 5.2684),
+    "Lean Hogs": (0.2539, 2.3722),
 }
